@@ -1,0 +1,14 @@
+{
+  "indexes": [
+    { "collectionGroup": "terms", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "archivedAt", "order": "ASCENDING" }, { "fieldPath": "academicYear", "order": "DESCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
+    { "collectionGroup": "weeks", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "archivedAt", "order": "ASCENDING" }, { "fieldPath": "sortOrder", "order": "ASCENDING" }, { "fieldPath": "number", "order": "ASCENDING" }] },
+    { "collectionGroup": "lessons", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "archivedAt", "order": "ASCENDING" }, { "fieldPath": "sortOrder", "order": "ASCENDING" }] },
+    { "collectionGroup": "lessons", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "archivedAt", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "sortOrder", "order": "ASCENDING" }] },
+    { "collectionGroup": "curriculumSubjects", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "frameworkId", "order": "ASCENDING" }, { "fieldPath": "name", "order": "ASCENDING" }] },
+    { "collectionGroup": "curriculumStrands", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "subjectId", "order": "ASCENDING" }, { "fieldPath": "levelId", "order": "ASCENDING" }, { "fieldPath": "code", "order": "ASCENDING" }] },
+    { "collectionGroup": "curriculumSubStrands", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "strandId", "order": "ASCENDING" }, { "fieldPath": "code", "order": "ASCENDING" }] },
+    { "collectionGroup": "curriculumContentStandards", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "subStrandId", "order": "ASCENDING" }, { "fieldPath": "code", "order": "ASCENDING" }] },
+    { "collectionGroup": "curriculumIndicators", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "contentStandardId", "order": "ASCENDING" }, { "fieldPath": "code", "order": "ASCENDING" }] }
+  ],
+  "fieldOverrides": []
+}

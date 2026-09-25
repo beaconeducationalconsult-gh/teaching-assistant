@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMember(workspaceId) {
+      return signedIn() && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+    function role(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role;
+    }
+    function canEdit(workspaceId) {
+      return isMember(workspaceId) && role(workspaceId) in ['owner', 'admin', 'editor'];
+    }
+    function isOwner(workspaceId) { return isMember(workspaceId) && role(workspaceId) == 'owner'; }
+    function validTimes() {
+      return request.resource.data.createdAt is timestamp && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'activeWorkspaceId', 'createdAt', 'updatedAt'])
+        && request.resource.data.activeWorkspaceId is string
+        && existsAfter(/databases/$(database)/documents/workspaces/$(request.resource.data.activeWorkspaceId)/members/$(uid));
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow read: if isMember(workspaceId);
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.name is string && validTimes();
+      allow update: if isOwner(workspaceId) && request.resource.data.ownerUid == resource.data.ownerUid
+        && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(workspaceId);
+
+      match /members/{uid} {
+        allow read: if signedIn() && (uid == request.auth.uid || isOwner(workspaceId));
+        // A user can create only their own first owner membership in the same batch as their workspace.
+        allow create: if signedIn() && uid == request.auth.uid
+          && request.resource.data.uid == uid && request.resource.data.role == 'owner' && validTimes()
+          && getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == uid;
+        allow update, delete: if false;
+      }
+
+      match /curriculumFrameworks/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumLevels/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumSubjects/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumStrands/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumSubStrands/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumContentStandards/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumIndicators/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+
+      match /terms/{termId} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validTimes();
+        allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+        allow delete: if isOwner(workspaceId);
+        match /weeks/{weekId} {
+          allow read: if isMember(workspaceId);
+          allow create: if canEdit(workspaceId) && validTimes();
+          allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+          allow delete: if isOwner(workspaceId);
+          match /lessons/{lessonId} {
+            allow read: if isMember(workspaceId);
+            allow create: if canEdit(workspaceId) && validTimes();
+            allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+            allow delete: if isOwner(workspaceId);
+            match /{childCollection}/{childId} {
+              function supported() { return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'assessments']; }
+              allow read: if isMember(workspaceId) && supported();
+              allow create: if canEdit(workspaceId) && supported() && validTimes();
+              allow update: if canEdit(workspaceId) && supported() && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+              allow delete: if canEdit(workspaceId) && supported();
+            }
+          }
+        }
+      }
+    }
+  }
+}

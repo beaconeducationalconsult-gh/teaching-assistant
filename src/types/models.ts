@@ -1,0 +1,23 @@
+import type { Timestamp } from "firebase/firestore";
+
+export type TimestampFields = { createdAt: Timestamp; updatedAt: Timestamp };
+export type ArchivedFields = { archivedAt: Timestamp | null };
+export type Role = "owner" | "admin" | "editor" | "viewer";
+export type LessonStatus = "draft" | "ready" | "taught";
+export type UserProfile = TimestampFields & { displayName: string; email: string; activeWorkspaceId: string };
+export type Workspace = TimestampFields & ArchivedFields & { name: string; ownerUid: string };
+export type WorkspaceMember = TimestampFields & { uid: string; role: Role };
+export type CurriculumFramework = TimestampFields & ArchivedFields & { name: string; jurisdiction: string; version: string; effectiveFrom: string | null; effectiveTo: string | null };
+export type CurriculumLevel = TimestampFields & { frameworkId: string; code: string; name: string; sortOrder: number };
+export type Subject = TimestampFields & ArchivedFields & { frameworkId: string; name: string; code: string; description: string };
+export type Strand = TimestampFields & { frameworkId: string; levelId: string; subjectId: string; code: string; name: string; description: string };
+export type SubStrand = TimestampFields & { frameworkId: string; levelId: string; subjectId: string; strandId: string; code: string; name: string; description: string };
+export type ContentStandard = TimestampFields & { frameworkId: string; levelId: string; subjectId: string; strandId: string; subStrandId: string; code: string; description: string };
+export type Indicator = TimestampFields & ArchivedFields & { frameworkId: string; levelId: string; subjectId: string; strandId: string; subStrandId: string; contentStandardId: string; code: string; fullCode: string; description: string };
+export type AcademicTerm = TimestampFields & ArchivedFields & { name: string; academicYear: string; startDate: string | null; endDate: string | null };
+export type Week = TimestampFields & ArchivedFields & { termId: string; number: number; title: string; startDate: string | null; endDate: string | null; sortOrder: number };
+export type Lesson = TimestampFields & ArchivedFields & { weekId: string; title: string; summary: string; objectives: string; plannedDate: string | null; durationMinutes: number | null; status: LessonStatus; sortOrder: number };
+export type LessonIndicatorLink = TimestampFields & { indicatorId: string; fullCode: string; subjectId: string; subjectName: string; levelId: string; sortOrder: number };
+export type Resource = TimestampFields & { title: string; type: "link" | "file" | "note" | "other"; url: string; storagePath: string; notes: string };
+export type Diagram = TimestampFields & { title: string; storagePath: string; caption: string; altText: string };
+export type Assessment = TimestampFields & { title: string; type: "formative" | "summative" | "practical" | "other"; instructions: string; markingNotes: string; plannedDate: string | null };
