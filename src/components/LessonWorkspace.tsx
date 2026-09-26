@@ -48,7 +48,7 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
     try {
       await updateLesson(workspaceId, termId, weekId, lesson.id, { title: draft.title, summary: draft.summary, objectives: draft.objectives, durationMinutes: duration ? Number(duration) : null });
       const created = await Promise.all(draft.steps.map((step, index) => addTeachingStep(workspaceId, termId, weekId, lesson.id, { title: step.title, phase: step.phase, instructions: step.instructions, minutes: step.minutes, sortOrder: Date.now() + index })));
-      setSteps((rows) => [...rows, ...created.map((ref, index) => ({ id: ref.id, ...draft.steps[index], archivedAt: null }))]);
+      setSteps((rows) => [...rows, ...created.map((ref, index) => ({ id: ref.id, ...draft.steps[index], sortOrder: Date.now() + index, archivedAt: null }))]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not apply the generated lesson."); }
     finally { setSaving(false); }
   }
