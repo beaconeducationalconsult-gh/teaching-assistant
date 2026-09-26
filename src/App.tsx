@@ -5,6 +5,7 @@ import { auth, firebaseConfigured } from "./lib/firebase";
 import { ensureWorkspace } from "./lib/workspace";
 import { addLesson, addTerm, addWeek, archiveLesson, listLessons, listTerms, listWeeks, setLessonStatus, type LessonRow, type TermRow, type WeekRow } from "./lib/planning";
 import type { UserProfile } from "./types/models";
+import CurriculumBrowser from "./components/CurriculumBrowser";
 import type { ReactNode } from "react";
 
 type AppSession = { user: User; profile: UserProfile };
@@ -119,7 +120,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
           </article>;
         })}<button className="add-week" onClick={() => setModal("week")}><span className="add-circle"><Plus size={16}/></span><span><b>Add another week</b><small>Keep your plan moving forward</small></span><ArrowRight size={16}/></button></div>}
         {!!terms.length && <div className="plan-foot"><span><ClipboardList size={14}/> {visibleLessonCount} lessons match this view</span><label className="search-box"><Search size={14}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a lesson"/></label></div>}
-      </section> : view === "curriculum" ? <CurriculumView/> : <AccountView session={session}/>}
+      </section> : view === "curriculum" ? <CurriculumView workspaceId={workspaceId}/> : <AccountView session={session}/>}
       <footer className="footer"><span>TEACHING ASSISTANT <i>·</i> A CLEARER WAY TO PLAN</span><span>Made for the work that matters.</span></footer>
     </main>
     {modal && <Modal title={modal === "term" ? "A new term, a fresh start." : modal === "week" ? "Add a week to the plan." : "Start with a lesson idea."} subtitle={modal === "term" ? "SET THE SEASON" : modal === "week" ? "SHAPE THE TIMELINE" : "MAKE IT CONCRETE"} onClose={() => setModal(null)}>
@@ -160,7 +161,7 @@ function LessonItem({ lesson, index, onStatus, onArchive }: { lesson: LessonRow;
   return <div className="lesson-row"><span className={`lesson-index idx-${index%4}`}>{String(index+1).padStart(2,"0")}</span><div className="lesson-copy"><b>{lesson.title}</b><small>{lesson.summary || "Add a summary when you are ready"}</small></div><select className={`status status-${lesson.status}`} value={lesson.status} onChange={(e) => onStatus(e.target.value as LessonRow["status"])} aria-label={`Status of ${lesson.title}`}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select><button className="icon-only archive-button" title="Archive lesson" onClick={onArchive}><Archive size={15}/></button></div>;
 }
 
-function CurriculumView() { return <section className="content secondary"><div className="overline"><i/> REUSABLE REFERENCE LIBRARY</div><h1>Curriculum, <em>close at hand.</em></h1><p className="intro">A home for the standards and indicators behind your teaching.</p><div className="library-card"><span className="library-icon"><BookOpen size={21}/></span><div><span className="overline">CURRICULUM LIBRARY</span><h2>Ready when you are.</h2><p>Your frameworks, subjects, strands, standards, and indicators will live here. Beacon's audited curriculum data can be imported when the first curriculum is selected.</p></div></div><div className="reference-note"><Sparkles size={16}/> Curriculum stays reusable across terms. Lesson materials belong to the lesson.</div></section>; }
+function CurriculumView({ workspaceId }: { workspaceId: string }) { return <CurriculumBrowser workspaceId={workspaceId} />; }
 function AccountView({ session }: { session: AppSession }) { return <section className="content secondary"><div className="overline"><i/> YOUR ACCOUNT</div><h1>Your teaching <em>space.</em></h1><p className="intro">The account and workspace that keep your plans together.</p><div className="account-card"><span className="avatar-lg">{initial(session.user.displayName)}</span><div><b>{session.user.displayName || "Educator"}</b><small>{session.user.email}</small></div><span className="owner-tag"><Check size={13}/> Owner</span></div><button className="button outlined" onClick={() => auth && void signOut(auth)}><LogOut size={15}/> Sign out</button></section>; }
 
 function ConfigNotice() { return <div className="center-screen"><div className="notice-card"><span className="brand-icon"><GraduationCap size={20}/></span><span className="overline"><i/> ONE QUICK SETUP</span><h1>Connect your Firebase project.</h1><p>The app is ready to run. Copy <code>.env.example</code> to <code>.env</code> and fill in the six Firebase web app values from your Firebase project.</p><pre>cp .env.example .env</pre></div></div>; }
