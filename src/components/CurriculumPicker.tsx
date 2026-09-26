@@ -102,7 +102,7 @@ export default function CurriculumPicker({ workspaceId, selectedIds, onSelect, o
 
   function choose(item: Indicator) {
     if (selectedIds.includes(item.id)) return;
-    onSelect({ indicatorId: item.id, fullCode: item.fullCode || item.code, subjectId, subjectName: subjects.find((x) => x.id === subjectId)?.name || "", levelId });
+    onSelect({ indicatorId: item.id, fullCode: item.fullCode || item.code, description: item.description, subjectId, subjectName: subjects.find((x) => x.id === subjectId)?.name || "", levelId });
   }
 
   if (loading) return <div className="picker-loading"><LoaderCircle className="spinner" size={16}/> Loading curriculum…</div>;
