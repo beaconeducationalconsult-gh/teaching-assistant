@@ -303,6 +303,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "indicatorLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archivedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sortOrder",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
