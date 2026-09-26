@@ -7,7 +7,17 @@ export async function ensureWorkspace(user: User): Promise<UserProfile> {
   if (!db) throw new Error("Firebase is not configured.");
   const profileRef = doc(db, "users", user.uid);
   const existing = await getDoc(profileRef);
-  if (existing.exists()) return existing.data() as UserProfile;
+  if (existing.exists()) {
+    const profile = existing.data() as UserProfile;
+    const memberRef = doc(db, "workspaces", profile.activeWorkspaceId, "members", user.uid);
+    const member = await getDoc(memberRef);
+    if (member.exists()) return profile;
+    const now = serverTimestamp();
+    const repair = writeBatch(db);
+    repair.set(memberRef, { uid: user.uid, role: "owner", createdAt: now, updatedAt: now });
+    await repair.commit();
+    return profile;
+  }
 
   const workspaceRef = doc(collection(db, "workspaces"));
   const memberRef = doc(db, "workspaces", workspaceRef.id, "members", user.uid);
