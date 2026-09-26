@@ -36,6 +36,30 @@ export async function addLesson(workspaceId: string, termId: string, weekId: str
     ...values, weekId, objectives: "", plannedDate: null, durationMinutes: null, status: "draft", sortOrder: Date.now(), createdAt: now, updatedAt: now, archivedAt: null,
   });
 }
+
+export type LessonIndicatorLinkRow = Row<{ indicatorId: string; fullCode: string; subjectId: string; subjectName: string; levelId: string; sortOrder: number; archivedAt: unknown }>;
+
+function lessonCollection(workspaceId: string, termId: string, weekId: string) {
+  return collection(firestore(), "workspaces", workspaceId, "terms", termId, "weeks", weekId, "lessons");
+}
+function lessonRef(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return doc(lessonCollection(workspaceId, termId, weekId), lessonId);
+}
+
+export async function updateLesson(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Partial<Pick<LessonRow, "title" | "summary" | "objectives" | "plannedDate" | "durationMinutes" | "status">>) {
+  await updateDoc(lessonRef(workspaceId, termId, weekId, lessonId), { ...values, updatedAt: serverTimestamp() });
+}
+export function listLessonIndicatorLinks(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return getRows<LessonIndicatorLinkRow>(collection(lessonRef(workspaceId, termId, weekId, lessonId), "indicatorLinks"), [where("archivedAt", "==", null), orderBy("sortOrder")]);
+}
+export async function addLessonIndicatorLink(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Omit<LessonIndicatorLinkRow, "id" | "archivedAt">) {
+  const now = serverTimestamp();
+  return addDoc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "indicatorLinks"), { ...values, createdAt: now, updatedAt: now, archivedAt: null });
+}
+export async function removeLessonIndicatorLink(workspaceId: string, termId: string, weekId: string, lessonId: string, linkId: string) {
+  await updateDoc(doc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "indicatorLinks"), linkId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
 export async function setLessonStatus(workspaceId: string, termId: string, weekId: string, lessonId: string, status: LessonRow["status"]) {
   await updateDoc(doc(firestore(), "workspaces", workspaceId, "terms", termId, "weeks", weekId, "lessons", lessonId), { status, updatedAt: serverTimestamp() });
 }
