@@ -67,6 +67,12 @@ service cloud.firestore {
             allow create: if canEdit(workspaceId) && validTimes();
             allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
             allow delete: if isOwner(workspaceId);
+            match /assessments/{assessmentId}/items/{itemId} {
+              allow read: if isMember(workspaceId);
+              allow create: if canEdit(workspaceId) && validTimes();
+              allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
+              allow delete: if canEdit(workspaceId);
+            }
             match /{childCollection}/{childId} {
               function supported() { return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'assessments', 'teachingSteps']; }
               allow read: if isMember(workspaceId) && supported();
