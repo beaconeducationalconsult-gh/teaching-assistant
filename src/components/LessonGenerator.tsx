@@ -22,7 +22,8 @@ export default function LessonGenerator({ indicators, durationMinutes, onApply }
     if (!indicators.length) return;
     const primary = indicators[0];
     const subject = primary.subjectName || "the subject";
-    const code = primary.fullCode || "the selected curriculum indicator";\n    const description = primary.description || "the selected curriculum indicator";
+    const code = primary.fullCode || "the selected curriculum indicator";
+    const description = primary.description || "the selected curriculum indicator";
     const clean = focus.trim() || description;
     const title = subject + ": " + clean.charAt(0).toUpperCase() + clean.slice(1);
     const minutes = durationMinutes || 50;
