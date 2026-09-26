@@ -8,7 +8,7 @@ function firestore() {
 }
 async function rows<T extends DocumentData>(path: ReturnType<typeof collection>, constraints: QueryConstraint[] = []) {
   const snapshot = await getDocs(query(path, ...constraints));
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as unknown as T);
+  return snapshot.docs.map((item) => ({ ...item.data(), id: item.id }) as T & { id: string });
 }
 function base(workspaceId: string, name: string) { return collection(firestore(), "workspaces", workspaceId, name); }
 
