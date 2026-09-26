@@ -317,6 +317,34 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "resources",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archivedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sortOrder",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "teachingSteps",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "archivedAt",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sortOrder",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
