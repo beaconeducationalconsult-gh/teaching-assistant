@@ -49,6 +49,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
   const [selectedLesson, setSelectedLesson] = useState<LessonRow | null>(null);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const workspaceId = session.profile.activeWorkspaceId;
 
   useEffect(() => {
@@ -114,7 +115,29 @@ function WorkspaceApp({ session }: { session: AppSession }) {
   return <div className="layout theme-dense">
     <aside className="sidebar">
       <a className="brand" href="#planning" onClick={(e) => { e.preventDefault(); setView("planning"); }}><span className="brand-icon"><GraduationCap size={20} /></span><span><b>Teaching Assistant</b><small>KL AZRUM · PLANNER</small></span></a>
-      <button className="workspace-switch"><span className="avatar-sm">{initial(session.user.displayName)}</span><span><b>{session.user.displayName || "My workspace"}</b><small>Personal workspace</small></span><ChevronDown size={15} /></button>
+      <div className="workspace-picker">
+        <button
+          type="button"
+          className={`workspace-switch ${workspaceMenuOpen ? "open" : ""}`}
+          aria-expanded={workspaceMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setWorkspaceMenuOpen((open) => !open)}
+        >
+          <span className="avatar-sm">{initial(session.user.displayName)}</span>
+          <span><b>{session.user.displayName || "My workspace"}</b><small>Personal workspace</small></span>
+          <ChevronDown className={workspaceMenuOpen ? "workspace-chevron open" : "workspace-chevron"} size={15} />
+        </button>
+        {workspaceMenuOpen && (
+          <div className="workspace-menu" role="menu">
+            <div className="workspace-menu-label">YOUR WORKSPACES</div>
+            <button type="button" className="workspace-option active" role="menuitem" onClick={() => setWorkspaceMenuOpen(false)}>
+              <span className="avatar-sm">{initial(session.user.displayName)}</span>
+              <span><b>{session.user.displayName || "My workspace"}</b><small>Personal workspace</small></span>
+              <Check size={14} />
+            </button>
+          </div>
+        )}
+      </div>
       <div className="side-label">WORKSPACE</div>
       <nav className="nav-list">
         <NavButton active={view === "planning"} icon={<CalendarDays size={17} />} onClick={() => setView("planning")}>My planning</NavButton>
