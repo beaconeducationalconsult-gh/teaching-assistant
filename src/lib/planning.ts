@@ -37,7 +37,7 @@ export async function addLesson(workspaceId: string, termId: string, weekId: str
   });
 }
 
-export type LessonIndicatorLinkRow = Row<{ indicatorId: string; fullCode: string; subjectId: string; subjectName: string; levelId: string; sortOrder: number; archivedAt: unknown }>;
+export type LessonIndicatorLinkRow = Row<{ indicatorId: string; fullCode: string; description: string; subjectId: string; subjectName: string; levelId: string; sortOrder: number; archivedAt: unknown }>;
 export type LessonResourceRow = Row<{ title: string; type: "link" | "note" | "file" | "other"; url: string; storagePath: string; notes: string; sortOrder: number; archivedAt: unknown }>;
 export type TeachingStepRow = Row<{ title: string; phase: "opening" | "explore" | "explain" | "practice" | "assessment" | "closing"; instructions: string; minutes: number | null; sortOrder: number; archivedAt: unknown }>;
 
