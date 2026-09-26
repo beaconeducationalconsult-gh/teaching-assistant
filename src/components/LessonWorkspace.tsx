@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, CalendarDays, Check, Clock3, Save, Trash2 } from "lucide-react";
-import { addLessonIndicatorLink, addLessonResource, addTeachingStep, listLessonIndicatorLinks, listLessonResources, listTeachingSteps, removeLessonIndicatorLink, removeLessonResource, removeTeachingStep, updateLesson, type LessonIndicatorLinkRow, type LessonResourceRow, type LessonRow, type TeachingStepRow } from "../lib/planning";
+import { addLessonIndicatorLink, addLessonResource, addTeachingStep, listLessonIndicatorLinks, listLessonResources, listTeachingSteps, removeLessonIndicatorLink, removeLessonResource, removeTeachingStep, updateLesson, updateTeachingStep, type LessonIndicatorLinkRow, type LessonResourceRow, type LessonRow, type TeachingStepRow } from "../lib/planning";
 import CurriculumPicker, { type CurriculumIndicatorChoice } from "./CurriculumPicker";
 import AssessmentBuilder from "./AssessmentBuilder";
 
