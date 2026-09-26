@@ -68,7 +68,7 @@ service cloud.firestore {
             allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
             allow delete: if isOwner(workspaceId);
             match /{childCollection}/{childId} {
-              function supported() { return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'assessments']; }
+              function supported() { return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'assessments', 'teachingSteps']; }
               allow read: if isMember(workspaceId) && supported();
               allow create: if canEdit(workspaceId) && supported() && validTimes();
               allow update: if canEdit(workspaceId) && supported() && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
