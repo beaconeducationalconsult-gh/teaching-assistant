@@ -48,6 +48,46 @@ function lessonRef(workspaceId: string, termId: string, weekId: string, lessonId
   return doc(lessonCollection(workspaceId, termId, weekId), lessonId);
 }
 
+export type AssessmentRow = Row<{ lessonId: string; title: string; type: "formative" | "summative" | "practical" | "other"; instructions: string; markingNotes: string; plannedDate: string | null; sortOrder: number; archivedAt: unknown }>;
+export type AssessmentItemRow = Row<{ assessmentId: string; type: "shortAnswer" | "multipleChoice" | "trueFalse" | "essay" | "practical"; prompt: string; marks: number; options: string[]; answer: string; markingGuide: string; indicatorId: string | null; sortOrder: number; archivedAt: unknown }>;
+
+function assessmentCollection(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return collection(lessonRef(workspaceId, termId, weekId, lessonId), "assessments");
+}
+function assessmentRef(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string) {
+  return doc(assessmentCollection(workspaceId, termId, weekId, lessonId), assessmentId);
+}
+function assessmentItemCollection(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string) {
+  return collection(assessmentRef(workspaceId, termId, weekId, lessonId, assessmentId), "items");
+}
+
+export function listAssessments(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return getRows<AssessmentRow>(assessmentCollection(workspaceId, termId, weekId, lessonId), [where("archivedAt", "==", null), orderBy("sortOrder")]);
+}
+export async function addAssessment(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Omit<AssessmentRow, "id" | "archivedAt">) {
+  const now = serverTimestamp();
+  return addDoc(assessmentCollection(workspaceId, termId, weekId, lessonId), { ...values, lessonId, createdAt: now, updatedAt: now, archivedAt: null });
+}
+export async function updateAssessment(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string, values: Partial<Omit<AssessmentRow, "id" | "archivedAt" | "lessonId">>) {
+  await updateDoc(assessmentRef(workspaceId, termId, weekId, lessonId, assessmentId), { ...values, updatedAt: serverTimestamp() });
+}
+export async function removeAssessment(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string) {
+  await updateDoc(assessmentRef(workspaceId, termId, weekId, lessonId, assessmentId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+export function listAssessmentItems(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string) {
+  return getRows<AssessmentItemRow>(assessmentItemCollection(workspaceId, termId, weekId, lessonId, assessmentId), [where("archivedAt", "==", null), orderBy("sortOrder")]);
+}
+export async function addAssessmentItem(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string, values: Omit<AssessmentItemRow, "id" | "archivedAt">) {
+  const now = serverTimestamp();
+  return addDoc(assessmentItemCollection(workspaceId, termId, weekId, lessonId, assessmentId), { ...values, assessmentId, createdAt: now, updatedAt: now, archivedAt: null });
+}
+export async function updateAssessmentItem(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string, itemId: string, values: Partial<Omit<AssessmentItemRow, "id" | "archivedAt" | "assessmentId">>) {
+  await updateDoc(doc(assessmentItemCollection(workspaceId, termId, weekId, lessonId, assessmentId), itemId), { ...values, updatedAt: serverTimestamp() });
+}
+export async function removeAssessmentItem(workspaceId: string, termId: string, weekId: string, lessonId: string, assessmentId: string, itemId: string) {
+  await updateDoc(doc(assessmentItemCollection(workspaceId, termId, weekId, lessonId, assessmentId), itemId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
 export async function updateLesson(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Partial<Pick<LessonRow, "title" | "summary" | "objectives" | "plannedDate" | "durationMinutes" | "status">>) {
   await updateDoc(lessonRef(workspaceId, termId, weekId, lessonId), { ...values, updatedAt: serverTimestamp() });
 }
