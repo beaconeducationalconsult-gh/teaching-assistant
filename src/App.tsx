@@ -6,6 +6,7 @@ import { ensureWorkspace } from "./lib/workspace";
 import { addLesson, addTerm, addWeek, archiveLesson, listLessons, listTerms, listWeeks, setLessonStatus, type LessonRow, type TermRow, type WeekRow } from "./lib/planning";
 import type { UserProfile } from "./types/models";
 import CurriculumBrowser from "./components/CurriculumBrowser";
+import LessonWorkspace from "./components/LessonWorkspace";
 import type { ReactNode } from "react";
 
 type AppSession = { user: User; profile: UserProfile };
@@ -47,6 +48,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
+  const [selectedLesson, setSelectedLesson] = useState<LessonRow | null>(null);
   const workspaceId = session.profile.activeWorkspaceId;
 
   useEffect(() => {
@@ -88,6 +90,8 @@ function WorkspaceApp({ session }: { session: AppSession }) {
     finally { setSaving(false); }
   }
 
+  if (selectedLesson) return <LessonWorkspace workspaceId={workspaceId} termId={selectedTermId} weekId={selectedLesson.weekId} lesson={selectedLesson} onBack={() => setSelectedLesson(null)} onSaved={() => setRevision((n) => n + 1)} />;
+
   return <div className="layout">
     <aside className="sidebar">
       <a className="brand" href="#planning" onClick={(e) => { e.preventDefault(); setView("planning"); }}><span className="brand-icon"><GraduationCap size={20} /></span><span><b>Teaching Assistant</b><small>KL AZRUM · PLANNER</small></span></a>
@@ -116,7 +120,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
           const rows = (lessons[week.id] || []).filter((lesson) => lesson.title.toLowerCase().includes(search.toLowerCase()));
           return <article className={`week-card ${opened ? "opened" : ""}`} key={week.id}>
             <button className="week-head" onClick={() => setExpandedWeek(opened ? "" : week.id)}><span className="week-no">{String(week.number).padStart(2,"0")}</span><span className="week-heading"><b>{week.title || `Week ${week.number}`}</b><small>{dateRange(week.startDate, week.endDate)}</small></span><span className="week-count"><BookOpen size={13}/> {(lessons[week.id] || []).length} lessons</span><ChevronDown className={opened ? "turn" : ""} size={17}/></button>
-            {opened && <div className="week-content">{rows.length ? rows.map((lesson, index) => <LessonItem key={lesson.id} lesson={lesson} index={index} onStatus={(status) => mutate(() => setLessonStatus(workspaceId, selectedTermId, week.id, lesson.id, status))} onArchive={() => { if (window.confirm(`Archive “${lesson.title}”?`)) void mutate(() => archiveLesson(workspaceId, selectedTermId, week.id, lesson.id)); }}/>) : <p className="week-empty">{search ? "No lessons match that search." : "Nothing planned here yet. Start with one small idea."}</p>}<button className="add-lesson" onClick={() => setModal("lesson")}><span><Plus size={14}/></span> Add a lesson to this week</button></div>}
+            {opened && <div className="week-content">{rows.length ? rows.map((lesson, index) => <LessonItem key={lesson.id} lesson={lesson} index={index} onOpen={() => setSelectedLesson(lesson)} onStatus={(status) => mutate(() => setLessonStatus(workspaceId, selectedTermId, week.id, lesson.id, status))} onArchive={() => { if (window.confirm(`Archive “${lesson.title}”?`)) void mutate(() => archiveLesson(workspaceId, selectedTermId, week.id, lesson.id)); }}/>) : <p className="week-empty">{search ? "No lessons match that search." : "Nothing planned here yet. Start with one small idea."}</p>}<button className="add-lesson" onClick={() => setModal("lesson")}><span><Plus size={14}/></span> Add a lesson to this week</button></div>}
           </article>;
         })}<button className="add-week" onClick={() => setModal("week")}><span className="add-circle"><Plus size={16}/></span><span><b>Add another week</b><small>Keep your plan moving forward</small></span><ArrowRight size={16}/></button></div>}
         {!!terms.length && <div className="plan-foot"><span><ClipboardList size={14}/> {visibleLessonCount} lessons match this view</span><label className="search-box"><Search size={14}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a lesson"/></label></div>}
@@ -157,8 +161,8 @@ function LessonForm({ busy, onCancel, onSave }: { busy: boolean; onCancel: () =>
 function ModalActions({ busy, onCancel, label }: { busy: boolean; onCancel: () => void; label: string }) { return <div className="modal-actions"><button type="button" className="button outlined" onClick={onCancel}>Cancel</button><button className="button dark" disabled={busy}>{busy ? "Saving…" : label}<ArrowRight size={15}/></button></div>; }
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) { return <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="modal"><button className="close" onClick={onClose} aria-label="Close"><X size={18}/></button><span className="overline"><i/> {subtitle}</span><h2>{title}</h2>{children}</section></div>; }
 
-function LessonItem({ lesson, index, onStatus, onArchive }: { lesson: LessonRow; index: number; onStatus: (status: LessonRow["status"]) => void; onArchive: () => void }) {
-  return <div className="lesson-row"><span className={`lesson-index idx-${index%4}`}>{String(index+1).padStart(2,"0")}</span><div className="lesson-copy"><b>{lesson.title}</b><small>{lesson.summary || "Add a summary when you are ready"}</small></div><select className={`status status-${lesson.status}`} value={lesson.status} onChange={(e) => onStatus(e.target.value as LessonRow["status"])} aria-label={`Status of ${lesson.title}`}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select><button className="icon-only archive-button" title="Archive lesson" onClick={onArchive}><Archive size={15}/></button></div>;
+function LessonItem({ lesson, index, onOpen, onStatus, onArchive }: { lesson: LessonRow; index: number; onOpen: () => void; onStatus: (status: LessonRow["status"]) => void; onArchive: () => void }) {
+  return <div className="lesson-row"><span className={`lesson-index idx-${index%4}`}>{String(index+1).padStart(2,"0")}</span><button type="button" className="lesson-copy" onClick={onOpen}><b>{lesson.title}</b><small>{lesson.summary || "Add a summary when you are ready"}</small></button><select className={`status status-${lesson.status}`} value={lesson.status} onChange={(e) => onStatus(e.target.value as LessonRow["status"])} aria-label={`Status of ${lesson.title}`}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select><button className="icon-only archive-button" title="Archive lesson" onClick={onArchive}><Archive size={15}/></button></div>;
 }
 
 function CurriculumView({ workspaceId }: { workspaceId: string }) { return <CurriculumBrowser workspaceId={workspaceId} />; }
