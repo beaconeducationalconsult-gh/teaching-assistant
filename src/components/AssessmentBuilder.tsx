@@ -8,6 +8,7 @@ import {
   removeAssessment,
   removeAssessmentItem,
   updateAssessment,
+  updateAssessmentItem,
   type AssessmentItemRow,
   type AssessmentRow,
   type LessonIndicatorLinkRow,
