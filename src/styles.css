@@ -78,3 +78,31 @@
 .step-form-actions,.question-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .theme-dense .step-actions .icon-only,.theme-dense .assessment-item-actions .icon-only{color:#7d8792}.theme-dense .step-actions .icon-only:hover,.theme-dense .assessment-item-actions .icon-only:hover{background:#20262d;color:#cbd2d9}.theme-dense .edit-mark{color:#9da6b0}.theme-dense .step-form-actions,.theme-dense .question-actions{gap:6px}
 @media(max-width:720px){.step-actions .icon-only,.assessment-item-actions .icon-only{padding:4px}.edit-mark{font-size:7px}}
+
+/* Workspace picker */
+.workspace-picker{position:relative;margin-top:39px}
+.workspace-picker .workspace-switch{margin-top:0;width:100%}
+.workspace-switch.open{border-bottom-left-radius:7px;border-bottom-right-radius:7px}
+.workspace-menu{position:absolute;z-index:20;top:calc(100% + 6px);left:0;right:0;border:1px solid var(--line);border-radius:9px;background:var(--paper);box-shadow:0 14px 34px #10151018;padding:7px}
+.workspace-menu-label{padding:6px 7px 5px;font-size:7px;font-weight:700;letter-spacing:1.3px;color:var(--muted)}
+.workspace-option{width:100%;display:flex;align-items:center;gap:8px;border:0;border-radius:7px;background:transparent;padding:7px;text-align:left;color:var(--ink)}
+.workspace-option>span:nth-child(2){display:grid;gap:2px;flex:1;min-width:0}
+.workspace-option b{font-size:9px;font-weight:700;color:var(--ink)}
+.workspace-option small{font-size:8px;color:var(--muted)}
+.workspace-option>svg{color:var(--olive);flex:none}
+.workspace-option:hover,.workspace-option.active{background:#eef0e8}
+.workspace-chevron{transition:transform .16s ease}
+.workspace-chevron.open{transform:rotate(180deg)}
+.theme-dense .workspace-picker{margin-top:24px}
+.theme-dense .workspace-switch{color:#dce1e7}
+.theme-dense .workspace-switch b{color:#dce1e7}
+.theme-dense .workspace-switch small{color:#7f8995}
+.theme-dense .workspace-switch.open{border-color:#46513e;background:#1d231f}
+.theme-dense .workspace-menu{border-color:#303740;background:#171b21;box-shadow:0 16px 38px #00000055}
+.theme-dense .workspace-menu-label{color:#77818c}
+.theme-dense .workspace-option{color:#dce1e7}
+.theme-dense .workspace-option b{color:#dce1e7}
+.theme-dense .workspace-option small{color:#818b97}
+.theme-dense .workspace-option>svg{color:#aabb83}
+.theme-dense .workspace-option:hover,.theme-dense .workspace-option.active{background:#252d26}
+@media(max-width:720px){.theme-dense .workspace-picker{margin-top:24px}}
