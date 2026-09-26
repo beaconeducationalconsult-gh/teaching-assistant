@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ClipboardList, Pencil, Trash2 } from "lucide-react";
 import {
   addAssessment,
   addAssessmentItem,
@@ -49,6 +49,7 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
   const [indicatorId, setIndicatorId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editingItemId, setEditingItemId] = useState("");
 
   const active = assessments.find((assessment) => assessment.id === activeId) || null;
   const totalMarks = useMemo(() => items.reduce((sum, item) => sum + (Number(item.marks) || 0), 0), [items]);
@@ -121,6 +122,40 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
     finally { setBusy(false); }
   }
 
+  function beginEditItem(item: AssessmentItemRow) {
+    setEditingItemId(item.id); setItemType(item.type); setPrompt(item.prompt); setMarks(String(item.marks)); setOptions(item.options.join("\n")); setAnswer(item.answer); setMarkingGuide(item.markingGuide); setIndicatorId(item.indicatorId || "");
+  }
+
+  function resetItemForm() {
+    setEditingItemId(""); setPrompt(""); setOptions(""); setAnswer(""); setMarkingGuide(""); setIndicatorId(""); setMarks("1"); setItemType("shortAnswer");
+  }
+
+  async function saveItem() {
+    if (!active || !editingItemId || !prompt.trim()) return;
+    setBusy(true); setError("");
+    try {
+      const normalizedOptions = itemType === "multipleChoice" ? options.split("\n").map((value) => value.trim()).filter(Boolean) : itemType === "trueFalse" ? ["True", "False"] : [];
+      const values = { type: itemType, prompt: prompt.trim(), marks: Math.max(1, Number(marks) || 1), options: normalizedOptions, answer: answer.trim(), markingGuide: markingGuide.trim(), indicatorId: indicatorId || null };
+      await updateAssessmentItem(workspaceId, termId, weekId, lessonId, active.id, editingItemId, values);
+      setItems((rows) => rows.map((row) => row.id === editingItemId ? { ...row, ...values } : row));
+      resetItemForm();
+    } catch (reason) { setError(message(reason)); }
+    finally { setBusy(false); }
+  }
+
+  async function moveItem(index: number, direction: -1 | 1) {
+    if (!active) return;
+    const target = index + direction; if (target < 0 || target >= items.length) return;
+    try {
+      const current = items[index]; const other = items[target];
+      await Promise.all([
+        updateAssessmentItem(workspaceId, termId, weekId, lessonId, active.id, current.id, { sortOrder: other.sortOrder }),
+        updateAssessmentItem(workspaceId, termId, weekId, lessonId, active.id, other.id, { sortOrder: current.sortOrder }),
+      ]);
+      const next = [...items]; [next[index], next[target]] = [next[target], next[index]]; setItems(next);
+    } catch (reason) { setError(message(reason)); }
+  }
+
   async function createItem() {
     if (!active || !prompt.trim()) return;
     setBusy(true); setError("");
@@ -186,7 +221,7 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
       {items.map((item, index) => <article className="assessment-item" key={item.id}>
         <span className="assessment-number">{String(index + 1).padStart(2, "0")}</span>
         <div className="assessment-item-copy"><div><b>{itemLabels[item.type]}</b><small>{item.marks} mark{item.marks === 1 ? "" : "s"}</small></div><p>{item.prompt}</p>{item.options.length > 0 && <ul>{item.options.map((option) => <li key={option}>{option}</li>)}</ul>}{item.markingGuide && <small className="marking-guide">Marking: {item.markingGuide}</small>}</div>
-        <button type="button" className="icon-only" title="Remove question" onClick={() => void deleteItem(item.id)}><Trash2 size={14}/></button>
+        <div className="assessment-item-actions"><button type="button" className="icon-only" title="Move up" disabled={index === 0} onClick={() => void moveItem(index, -1)}><ArrowUp size={12}/></button><button type="button" className="icon-only" title="Move down" disabled={index === items.length - 1} onClick={() => void moveItem(index, 1)}><ArrowDown size={12}/></button><button type="button" className="icon-only" title="Edit question" onClick={() => beginEditItem(item)}><Pencil size={13}/></button><button type="button" className="icon-only danger-icon" title="Remove question" onClick={() => void deleteItem(item.id)}><Trash2 size={14}/></button></div>
       </article>)}
       {!items.length && <div className="assessment-empty"><ClipboardList size={19}/><span>Add the first question below.</span></div>}
 
@@ -200,7 +235,7 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
         {itemType === "multipleChoice" && <textarea rows={4} value={options} onChange={(e) => setOptions(e.target.value)} placeholder={"Options — one per line\nA. …\nB. …\nC. …"} />}
         <input value={answer} onChange={(e) => setAnswer(e.target.value)} placeholder={itemType === "multipleChoice" ? "Correct option" : "Expected answer / response"} />
         <textarea rows={3} value={markingGuide} onChange={(e) => setMarkingGuide(e.target.value)} placeholder="Specific marking guidance…" />
-        <button type="button" className="button outlined" onClick={() => void createItem()} disabled={busy || !prompt.trim()}><Check size={14}/> Add question</button>
+        <div className="question-actions">{editingItemId && <button type="button" className="button outlined" onClick={resetItemForm}>Cancel edit</button>}<button type="button" className="button outlined" onClick={() => void (editingItemId ? saveItem() : createItem())} disabled={busy || !prompt.trim()}><Check size={14}/> {editingItemId ? "Save question" : "Add question"}</button></div>
       </div>
     </div>}
   </section>;
