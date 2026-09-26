@@ -21,3 +21,4 @@ export type LessonIndicatorLink = TimestampFields & { indicatorId: string; fullC
 export type Resource = TimestampFields & { title: string; type: "link" | "file" | "note" | "other"; url: string; storagePath: string; notes: string };
 export type Diagram = TimestampFields & { title: string; storagePath: string; caption: string; altText: string };
 export type Assessment = TimestampFields & { title: string; type: "formative" | "summative" | "practical" | "other"; instructions: string; markingNotes: string; plannedDate: string | null };
+export type TeachingStep = TimestampFields & ArchivedFields & { lessonId: string; title: string; phase: "opening" | "explore" | "explain" | "practice" | "assessment" | "closing"; instructions: string; minutes: number | null; sortOrder: number };
