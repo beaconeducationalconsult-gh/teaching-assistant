@@ -6,6 +6,7 @@ import type { ContentStandard, CurriculumFramework, CurriculumLevel, Indicator, 
 export type CurriculumIndicatorChoice = {
   indicatorId: string;
   fullCode: string;
+  description: string;
   subjectId: string;
   subjectName: string;
   levelId: string;
