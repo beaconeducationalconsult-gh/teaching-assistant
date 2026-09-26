@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ArrowLeft, CalendarDays, Check, Clock3, Save, Trash2 } from "lucide-react";
 import { addLessonIndicatorLink, addLessonResource, addTeachingStep, listLessonIndicatorLinks, listLessonResources, listTeachingSteps, removeLessonIndicatorLink, removeLessonResource, removeTeachingStep, updateLesson, type LessonIndicatorLinkRow, type LessonResourceRow, type LessonRow, type TeachingStepRow } from "../lib/planning";
 import CurriculumPicker, { type CurriculumIndicatorChoice } from "./CurriculumPicker";
+import AssessmentBuilder from "./AssessmentBuilder";
 
 type Props = { workspaceId: string; termId: string; weekId: string; lesson: LessonRow; onBack: () => void; onSaved: () => void; };
 
@@ -122,7 +123,7 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
           <div className="resource-list">{resources.map((resource) => <div className="resource-item" key={resource.id}><div><b>{resource.title}</b><small>{resource.type === "link" ? resource.url : resource.notes}</small></div><button type="button" className="icon-only" title="Remove resource" onClick={() => void removeResource(resource.id)}><Trash2 size={14}/></button></div>)}</div>
           <div className="resource-form"><input value={resourceTitle} onChange={(e) => setResourceTitle(e.target.value)} placeholder="Resource title"/><input value={resourceUrl} onChange={(e) => setResourceUrl(e.target.value)} placeholder="https://… (optional for notes)"/><textarea rows={2} value={resourceNotes} onChange={(e) => setResourceNotes(e.target.value)} placeholder="Notes or how this resource will be used"/><button type="button" className="button outlined" onClick={() => void addResource()}>+ Add resource</button></div>
         </section>
-        <section className="editor-card next-card"><span className="overline">COMING NEXT</span><h3>Assessment builder</h3><p>Once the teaching flow is in place, assessment items can be tied directly to the lesson objectives and curriculum indicators.</p><span className="feature-row"><Check size={14}/> Formative checks</span><span className="feature-row"><Check size={14}/> Marking guidance</span></section>
+        <AssessmentBuilder workspaceId={workspaceId} termId={termId} weekId={weekId} lessonId={lesson.id} indicators={links} />
       </aside>
     </form>
   </section>;
