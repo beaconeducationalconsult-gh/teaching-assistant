@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, CalendarDays, Check, Clock3, Save, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, CalendarDays, Check, Clock3, Save, Trash2 } from "lucide-react";
 import { addLessonIndicatorLink, addLessonResource, addTeachingStep, listLessonIndicatorLinks, listLessonResources, listTeachingSteps, removeLessonIndicatorLink, removeLessonResource, removeTeachingStep, updateLesson, type LessonIndicatorLinkRow, type LessonResourceRow, type LessonRow, type TeachingStepRow } from "../lib/planning";
 import CurriculumPicker, { type CurriculumIndicatorChoice } from "./CurriculumPicker";
 import AssessmentBuilder from "./AssessmentBuilder";
@@ -26,6 +26,7 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
   const [stepPhase, setStepPhase] = useState<TeachingStepRow["phase"]>("opening");
   const [stepMinutes, setStepMinutes] = useState("");
   const [stepInstructions, setStepInstructions] = useState("");
+  const [editingStepId, setEditingStepId] = useState("");
 
   useEffect(() => {
     let live = true;
@@ -74,6 +75,37 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not remove the resource."); }
   }
 
+  function beginEditStep(step: TeachingStepRow) {
+    setEditingStepId(step.id); setStepTitle(step.title); setStepPhase(step.phase); setStepMinutes(step.minutes ? String(step.minutes) : ""); setStepInstructions(step.instructions);
+  }
+
+  function resetStepForm() {
+    setEditingStepId(""); setStepTitle(""); setStepMinutes(""); setStepInstructions(""); setStepPhase("opening");
+  }
+
+  async function saveStep() {
+    if (!editingStepId || !stepTitle.trim() || !stepInstructions.trim()) return;
+    try {
+      const values = { title: stepTitle.trim(), phase: stepPhase, instructions: stepInstructions.trim(), minutes: stepMinutes ? Number(stepMinutes) : null };
+      await updateTeachingStep(workspaceId, termId, weekId, lesson.id, editingStepId, values);
+      setSteps((rows) => rows.map((row) => row.id === editingStepId ? { ...row, ...values } : row));
+      resetStepForm();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update the teaching step."); }
+  }
+
+  async function moveStep(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= steps.length) return;
+    try {
+      const current = steps[index]; const other = steps[target];
+      await Promise.all([
+        updateTeachingStep(workspaceId, termId, weekId, lesson.id, current.id, { sortOrder: other.sortOrder }),
+        updateTeachingStep(workspaceId, termId, weekId, lesson.id, other.id, { sortOrder: current.sortOrder }),
+      ]);
+      const next = [...steps]; [next[index], next[target]] = [next[target], next[index]]; setSteps(next);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reorder the teaching steps."); }
+  }
+
   async function addStep() {
     if (!stepTitle.trim() || !stepInstructions.trim()) return;
     try {
@@ -115,8 +147,8 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
         <section className="editor-card"><span className="overline">TEACHING DETAILS</span><div className="detail-field"><CalendarDays size={15}/><label>Date<input type="date" value={plannedDate} onChange={(e) => setPlannedDate(e.target.value)}/></label></div><div className="detail-field"><Clock3 size={15}/><label>Duration (minutes)<input type="number" min="1" value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="50"/></label></div><div className="detail-field"><Check size={15}/><label>Status<select value={status} onChange={(e) => setStatus(e.target.value as LessonRow["status"])}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select></label></div></section>
         <section className="editor-card">
           <div className="editor-card-head"><div><span className="overline">TEACHING FLOW</span><h2>Lesson sequence</h2></div><span className="count-pill">{steps.length}</span></div>
-          <div className="step-list">{steps.map((step, index) => <div className="teaching-step" key={step.id}><span className="step-number">{String(index + 1).padStart(2, "0")}</span><div><div className="step-meta"><b>{step.title}</b><small>{step.phase}{step.minutes ? " · " + step.minutes + " min" : ""}</small></div><p>{step.instructions}</p></div><button type="button" className="icon-only" title="Remove step" onClick={() => void removeStep(step.id)}><Trash2 size={14}/></button></div>)}</div>
-          <div className="step-form"><div className="form-row"><input value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} placeholder="Activity title, e.g. Starter question"/><select value={stepPhase} onChange={(e) => setStepPhase(e.target.value as TeachingStepRow["phase"])}><option value="opening">Opening</option><option value="explore">Explore</option><option value="explain">Explain</option><option value="practice">Practice</option><option value="assessment">Assessment</option><option value="closing">Closing</option></select><input type="number" min="1" value={stepMinutes} onChange={(e) => setStepMinutes(e.target.value)} placeholder="Min"/></div><textarea rows={3} value={stepInstructions} onChange={(e) => setStepInstructions(e.target.value)} placeholder="What will the teacher and learners do? Include prompts, grouping, materials, or expected evidence."/><button type="button" className="button outlined" onClick={() => void addStep()}>+ Add teaching step</button></div>
+          <div className="step-list">{steps.map((step, index) => <div className="teaching-step" key={step.id}><span className="step-number">{String(index + 1).padStart(2, "0")}</span><div><div className="step-meta"><b>{step.title}</b><small>{step.phase}{step.minutes ? " · " + step.minutes + " min" : ""}</small></div><p>{step.instructions}</p></div><div className="step-actions"><button type="button" className="icon-only" title="Move up" disabled={index === 0} onClick={() => void moveStep(index, -1)}><ArrowUp size={12}/></button><button type="button" className="icon-only" title="Move down" disabled={index === steps.length - 1} onClick={() => void moveStep(index, 1)}><ArrowDown size={12}/></button><button type="button" className="icon-only" title="Edit step" onClick={() => beginEditStep(step)}><span className="edit-mark">Edit</span></button><button type="button" className="icon-only danger-icon" title="Remove step" onClick={() => void removeStep(step.id)}><Trash2 size={14}/></button></div></div>)}</div>
+          <div className="step-form"><div className="form-row"><input value={stepTitle} onChange={(e) => setStepTitle(e.target.value)} placeholder="Activity title, e.g. Starter question"/><select value={stepPhase} onChange={(e) => setStepPhase(e.target.value as TeachingStepRow["phase"])}><option value="opening">Opening</option><option value="explore">Explore</option><option value="explain">Explain</option><option value="practice">Practice</option><option value="assessment">Assessment</option><option value="closing">Closing</option></select><input type="number" min="1" value={stepMinutes} onChange={(e) => setStepMinutes(e.target.value)} placeholder="Min"/></div><textarea rows={3} value={stepInstructions} onChange={(e) => setStepInstructions(e.target.value)} placeholder="What will the teacher and learners do? Include prompts, grouping, materials, or expected evidence."/><div className="step-form-actions">{editingStepId && <button type="button" className="button outlined" onClick={resetStepForm}>Cancel edit</button>}<button type="button" className="button outlined" onClick={() => void (editingStepId ? saveStep() : addStep())}>{editingStepId ? "Save step" : "+ Add teaching step"}</button></div></div>
         </section>
         <section className="editor-card">
           <div className="editor-card-head"><div><span className="overline">MATERIALS</span><h2>Resources</h2></div><span className="count-pill">{resources.length}</span></div>
