@@ -31,5 +31,5 @@ export function listContentStandards(workspaceId: string, frameworkId: string, l
   return rows<ContentStandard>(base(workspaceId, "curriculumContentStandards"), [where("frameworkId", "==", frameworkId), where("levelId", "==", levelId), where("subjectId", "==", subjectId), where("strandId", "==", strandId), where("subStrandId", "==", subStrandId), orderBy("code")]);
 }
 export function listIndicators(workspaceId: string, frameworkId: string, levelId: string, subjectId: string, strandId: string, subStrandId: string, contentStandardId: string) {
-  return rows<Indicator>(base(workspaceId, "curriculumIndicators"), [where("frameworkId", "==", frameworkId), where("levelId", "==", levelId), where("subjectId", subjectId), where("strandId", strandId), where("subStrandId", subStrandId), where("contentStandardId", "==", contentStandardId), where("archivedAt", "==", null), orderBy("code")]);
+  return rows<Indicator>(base(workspaceId, "curriculumIndicators"), [where("frameworkId", "==", frameworkId), where("levelId", "==", levelId), where("subjectId", "==", subjectId), where("strandId", "==", strandId), where("subStrandId", "==", subStrandId), where("contentStandardId", "==", contentStandardId), where("archivedAt", "==", null), orderBy("code")]);
 }
