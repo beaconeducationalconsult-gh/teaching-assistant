@@ -38,6 +38,8 @@ export async function addLesson(workspaceId: string, termId: string, weekId: str
 }
 
 export type LessonIndicatorLinkRow = Row<{ indicatorId: string; fullCode: string; subjectId: string; subjectName: string; levelId: string; sortOrder: number; archivedAt: unknown }>;
+export type LessonResourceRow = Row<{ title: string; type: "link" | "note" | "file" | "other"; url: string; storagePath: string; notes: string; sortOrder: number; archivedAt: unknown }>;
+export type TeachingStepRow = Row<{ title: string; phase: "opening" | "explore" | "explain" | "practice" | "assessment" | "closing"; instructions: string; minutes: number | null; sortOrder: number; archivedAt: unknown }>;
 
 function lessonCollection(workspaceId: string, termId: string, weekId: string) {
   return collection(firestore(), "workspaces", workspaceId, "terms", termId, "weeks", weekId, "lessons");
@@ -58,6 +60,32 @@ export async function addLessonIndicatorLink(workspaceId: string, termId: string
 }
 export async function removeLessonIndicatorLink(workspaceId: string, termId: string, weekId: string, lessonId: string, linkId: string) {
   await updateDoc(doc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "indicatorLinks"), linkId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
+
+export function listLessonResources(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return getRows<LessonResourceRow>(collection(lessonRef(workspaceId, termId, weekId, lessonId), "resources"), [where("archivedAt", "==", null), orderBy("sortOrder")]);
+}
+export async function addLessonResource(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Omit<LessonResourceRow, "id" | "archivedAt">) {
+  const now = serverTimestamp();
+  return addDoc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "resources"), { ...values, createdAt: now, updatedAt: now, archivedAt: null });
+}
+export async function removeLessonResource(workspaceId: string, termId: string, weekId: string, lessonId: string, resourceId: string) {
+  await updateDoc(doc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "resources"), resourceId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+
+export function listTeachingSteps(workspaceId: string, termId: string, weekId: string, lessonId: string) {
+  return getRows<TeachingStepRow>(collection(lessonRef(workspaceId, termId, weekId, lessonId), "teachingSteps"), [where("archivedAt", "==", null), orderBy("sortOrder")]);
+}
+export async function addTeachingStep(workspaceId: string, termId: string, weekId: string, lessonId: string, values: Omit<TeachingStepRow, "id" | "archivedAt">) {
+  const now = serverTimestamp();
+  return addDoc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "teachingSteps"), { ...values, createdAt: now, updatedAt: now, archivedAt: null });
+}
+export async function updateTeachingStep(workspaceId: string, termId: string, weekId: string, lessonId: string, stepId: string, values: Partial<Omit<TeachingStepRow, "id" | "archivedAt">>) {
+  await updateDoc(doc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "teachingSteps"), stepId), { ...values, updatedAt: serverTimestamp() });
+}
+export async function removeTeachingStep(workspaceId: string, termId: string, weekId: string, lessonId: string, stepId: string) {
+  await updateDoc(doc(collection(lessonRef(workspaceId, termId, weekId, lessonId), "teachingSteps"), stepId), { archivedAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
 
 export async function setLessonStatus(workspaceId: string, termId: string, weekId: string, lessonId: string, status: LessonRow["status"]) {
