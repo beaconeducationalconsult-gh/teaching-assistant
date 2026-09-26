@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, CalendarDays, Check, Clock3, Link2, Plus, Save, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, Clock3, Link2, Save, Trash2 } from "lucide-react";
 import { addLessonIndicatorLink, listLessonIndicatorLinks, removeLessonIndicatorLink, updateLesson, type LessonIndicatorLinkRow, type LessonRow } from "../lib/planning";
+import CurriculumPicker, { type CurriculumIndicatorChoice } from "./CurriculumPicker";
 
 type Props = { workspaceId: string; termId: string; weekId: string; lesson: LessonRow; onBack: () => void; onSaved: () => void; };
 
@@ -14,7 +15,7 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
   const [links, setLinks] = useState<LessonIndicatorLinkRow[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [newLink, setNewLink] = useState({ code: "", description: "", indicatorId: "", subjectId: "", subjectName: "", levelId: "" });
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -31,12 +32,11 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
     finally { setSaving(false); }
   }
 
-  async function addLink() {
-    if (!newLink.indicatorId || !newLink.code.trim()) return;
+  async function addLink(choice: CurriculumIndicatorChoice) {
     try {
-      const ref = await addLessonIndicatorLink(workspaceId, termId, weekId, lesson.id, { indicatorId: newLink.indicatorId, fullCode: newLink.code.trim(), subjectId: newLink.subjectId, subjectName: newLink.subjectName, levelId: newLink.levelId, sortOrder: Date.now() });
-      setLinks((rows) => [...rows, { id: ref.id, ...newLink, fullCode: newLink.code.trim(), sortOrder: Date.now(), archivedAt: null } as LessonIndicatorLinkRow]);
-      setNewLink({ code: "", description: "", indicatorId: "", subjectId: "", subjectName: "", levelId: "" });
+      const sortOrder = Date.now();
+      const ref = await addLessonIndicatorLink(workspaceId, termId, weekId, lesson.id, { ...choice, sortOrder });
+      setLinks((rows) => [...rows, { id: ref.id, ...choice, sortOrder, archivedAt: null }]);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not link the indicator."); }
   }
 
@@ -56,8 +56,9 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
         <label className="editor-field"><span>LEARNING OBJECTIVES</span><textarea rows={7} value={objectives} onChange={(e) => setObjectives(e.target.value)} placeholder="By the end of the lesson, learners should be able to…"/></label>
         <section className="editor-card"><div className="editor-card-head"><div><span className="overline">CURRICULUM ALIGNMENT</span><h2>Learning indicators</h2></div><span className="count-pill">{links.length}</span></div>
           {links.map((link) => <div className="linked-indicator" key={link.id}><div><b>{link.fullCode}</b><p>{link.subjectName || "Curriculum indicator"}</p></div><button type="button" className="icon-only" title="Remove indicator" onClick={() => void removeLink(link.id)}><Trash2 size={14}/></button></div>)}
-          <div className="link-adder"><input value={newLink.code} onChange={(e) => setNewLink((v) => ({...v, code:e.target.value, indicatorId:e.target.value}))} placeholder="Indicator code, e.g. B7.1.2.1.1"/><input value={newLink.subjectName} onChange={(e) => setNewLink((v) => ({...v, subjectName:e.target.value}))} placeholder="Subject"/><button type="button" className="button outlined" onClick={() => void addLink()}><Plus size={14}/> Link</button></div>
-          <small className="helper">The next step will let you choose these directly from the curriculum browser instead of entering the code manually.</small>
+          <button type="button" className="button outlined picker-trigger" onClick={() => setPickerOpen(true)}><span>+</span> Browse curriculum</button>
+          {pickerOpen && <div className="picker-panel"><CurriculumPicker workspaceId={workspaceId} selectedIds={links.map((link) => link.indicatorId)} onSelect={(choice) => { void addLink(choice); }} onClose={() => setPickerOpen(false)} /></div>}
+          <small className="helper">Browse the hierarchy or search by indicator code and description. Added indicators are stored against their exact curriculum record.</small>
         </section>
       </div>
       <aside className="editor-side">
