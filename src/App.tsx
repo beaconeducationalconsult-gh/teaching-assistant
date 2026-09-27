@@ -7,6 +7,9 @@ import { addLesson, addTerm, addWeek, archiveLesson, archiveTerm, archiveWeek, l
 import type { UserProfile } from "./types/models";
 import CurriculumBrowser from "./components/CurriculumBrowser";
 import LessonWorkspace from "./components/LessonWorkspace";
+import LessonSetupForm from "./components/LessonSetupForm";
+import ThemeSwitch from "./components/ThemeSwitch";
+import { useTheme, type ThemeName } from "./lib/theme";
 import type { ReactNode } from "react";
 
 type AppSession = { user: User; profile: UserProfile };
@@ -19,6 +22,7 @@ export default function App() {
   const [session, setSession] = useState<AppSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [setupError, setSetupError] = useState("");
+  const { theme, setTheme } = useTheme();
 
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
@@ -31,13 +35,13 @@ export default function App() {
     });
   }, []);
 
-  if (!firebaseConfigured) return <ConfigNotice />;
+  if (!firebaseConfigured) return <ConfigNotice theme={theme} onThemeChange={setTheme} />;
   if (loading) return <div className="loading"><span className="spinner" />Opening your workspace…</div>;
-  if (!session) return <AuthPage setupError={setupError} />;
-  return <WorkspaceApp session={session} />;
+  if (!session) return <AuthPage setupError={setupError} theme={theme} onThemeChange={setTheme} />;
+  return <WorkspaceApp session={session} theme={theme} onThemeChange={setTheme} />;
 }
 
-function WorkspaceApp({ session }: { session: AppSession }) {
+function WorkspaceApp({ session, theme, onThemeChange }: { session: AppSession; theme: ThemeName; onThemeChange: (theme: ThemeName) => void }) {
   const [view, setView] = useState<View>("planning");
   const [terms, setTerms] = useState<TermRow[]>([]);
   const [archivedTerms, setArchivedTerms] = useState<TermRow[]>([]);
@@ -54,6 +58,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
   const [selectedLesson, setSelectedLesson] = useState<LessonRow | null>(null);
+  const [lessonTarget, setLessonTarget] = useState<{ termId: string; weekId: string } | null>(null);
   const workspaceId = session.profile.activeWorkspaceId;
 
   useEffect(() => {
@@ -104,20 +109,25 @@ function WorkspaceApp({ session }: { session: AppSession }) {
 
   async function mutate(action: () => Promise<unknown>) {
     setSaving(true); setError("");
-    try { await action(); setModal(null); setEditingWeek(null); setRevision((number) => number + 1); }
+    try { await action(); closeModal(); setRevision((number) => number + 1); }
     catch (reason) { setError(friendlyError(reason)); }
     finally { setSaving(false); }
   }
 
-  function closeModal() { setModal(null); setEditingWeek(null); }
+  function closeModal() { setModal(null); setEditingWeek(null); setLessonTarget(null); }
   function archiveCurrentTerm() {
     if (selectedTerm && window.confirm(`Archive “${selectedTerm.name}”? Its weeks and lessons will stay saved and can be restored later.`)) {
       void mutate(() => archiveTerm(workspaceId, selectedTerm.id));
     }
   }
 
+  const selectedWeek = selectedLesson ? weeks.find((week) => week.id === selectedLesson.weekId) : undefined;
+  const placement = selectedLesson && selectedTerm && selectedWeek
+    ? `${selectedTerm.name} · Week ${selectedWeek.number}${selectedWeek.title ? ` · ${selectedWeek.title}` : ""}`
+    : "";
+
   const page = selectedLesson
-    ? <LessonWorkspace key={selectedLesson.id} workspaceId={workspaceId} termId={selectedTermId} weekId={selectedLesson.weekId} lesson={selectedLesson} onBack={() => setSelectedLesson(null)} onSaved={() => setRevision((number) => number + 1)} />
+    ? <LessonWorkspace key={selectedLesson.id} workspaceId={workspaceId} termId={selectedTermId} weekId={selectedLesson.weekId} lesson={selectedLesson} placement={placement} onBack={() => setSelectedLesson(null)} onSaved={() => setRevision((number) => number + 1)} />
     : view === "planning"
       ? <section className="content">
         <div className="hero"><div><div className="overline"><i /> YOUR TEACHING SPACE</div><h1>Plan with a little more <em>purpose.</em></h1><p>A thoughtful place to shape the weeks ahead, one lesson at a time.</p></div><div className="hero-graphic" aria-hidden="true"><span className="orb"/><span className="plant-stem"/><i className="leaf leaf-one"/><i className="leaf leaf-two"/><i className="leaf leaf-three"/><span className="hill"/></div></div>
@@ -138,7 +148,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
             <button className="week-head" onClick={() => setExpandedWeek(opened ? "" : week.id)}><span className="week-no">{String(week.number).padStart(2,"0")}</span><span className="week-heading"><b>{week.title || `Week ${week.number}`}</b><small>{dateRange(week.startDate, week.endDate)}</small></span><span className="week-count"><BookOpen size={13}/> {(lessons[week.id] || []).length} lessons</span><ChevronDown className={opened ? "turn" : ""} size={17}/></button>
             {opened && <div className="week-content">{rows.length ? rows.map((lesson, lessonIndex) => <LessonItem key={lesson.id} lesson={lesson} index={lessonIndex} onOpen={() => setSelectedLesson(lesson)} onStatus={(status) => mutate(() => setLessonStatus(workspaceId, selectedTermId, week.id, lesson.id, status))} onArchive={() => { if (window.confirm(`Archive “${lesson.title}”?`)) void mutate(() => archiveLesson(workspaceId, selectedTermId, week.id, lesson.id)); }}/>) : <p className="week-empty">{search ? "No lessons match that search." : "Nothing planned here yet. Start with one small idea."}</p>}
               <div className="week-actions"><button type="button" className="button outlined" onClick={() => { setEditingWeek(week); setModal("editWeek"); }}><Pencil size={12}/> Edit week</button><button type="button" className="icon-only" title="Move week earlier" aria-label={`Move Week ${week.number} earlier`} disabled={index === 0} onClick={() => index > 0 && void mutate(() => reorderWeeks(workspaceId, selectedTermId, weeks[index - 1], week))}><ArrowUp size={14}/></button><button type="button" className="icon-only" title="Move week later" aria-label={`Move Week ${week.number} later`} disabled={index === weeks.length - 1} onClick={() => index < weeks.length - 1 && void mutate(() => reorderWeeks(workspaceId, selectedTermId, week, weeks[index + 1]))}><ArrowDown size={14}/></button><button type="button" className="icon-only danger-icon" title="Archive week" aria-label={`Archive Week ${week.number}`} onClick={() => { if (window.confirm(`Archive Week ${week.number}? Its lessons will stay saved and can be restored later.`)) void mutate(() => archiveWeek(workspaceId, selectedTermId, week.id)); }}><Archive size={14}/></button></div>
-              <button className="add-lesson" onClick={() => setModal("lesson")}><span><Plus size={14}/></span> Add a lesson to this week</button>
+              <button className="add-lesson" onClick={() => { setLessonTarget({ termId: selectedTermId, weekId: week.id }); setModal("lesson"); }}><span><Plus size={14}/></span> Add a lesson to this week</button>
             </div>}
           </article>;
         })}<button className="add-week" onClick={() => setModal("week")}><span className="add-circle"><Plus size={16}/></span><span><b>Add another week</b><small>Keep your plan moving forward</small></span><ArrowRight size={16}/></button></div>}
@@ -154,7 +164,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
     startDate: selectedTerm.startDate, endDate: selectedTerm.endDate,
   } : null;
 
-  return <div className="layout theme-dense">
+  return <div className="layout">
     <aside className="sidebar">
       <a className="brand" href="#planning" onClick={(event) => { event.preventDefault(); setView("planning"); }}><span className="brand-icon"><GraduationCap size={20} /></span><span><b>Teaching Assistant</b><small>KL AZRUM · PLANNER</small></span></a>
       <div className="workspace-picker"><div className="workspace-switch" aria-label="Personal workspace"><span className="avatar-sm">{initial(session.user.displayName)}</span><span><b>{session.user.displayName || "My teaching workspace"}</b><small>Personal workspace · current</small></span></div></div>
@@ -171,7 +181,7 @@ function WorkspaceApp({ session }: { session: AppSession }) {
     </aside>
 
     <main className="main">
-      <header className="topbar"><div className="crumb">Teaching Assistant <span>/</span> <b>{selectedLesson ? "Lesson workspace" : view === "planning" ? "My planning" : view === "curriculum" ? "Curriculum" : "Account"}</b></div><div className="topbar-right"><span className="connected"><i /> Workspace connected</span><button className="icon-only" title="Help"><CircleHelp size={18} /></button></div></header>
+      <header className="topbar"><div className="crumb">Teaching Assistant <span>/</span> <b>{selectedLesson ? "Lesson workspace" : view === "planning" ? "My planning" : view === "curriculum" ? "Curriculum" : "Account"}</b></div><div className="topbar-right"><ThemeSwitch theme={theme} onChange={onThemeChange} /><span className="connected"><i /> Workspace connected</span><button className="icon-only" title="Help"><CircleHelp size={18} /></button></div></header>
       {page}
       <footer className="footer"><span>TEACHING ASSISTANT <i>·</i> A CLEARER WAY TO PLAN</span><span>Made for the work that matters.</span></footer>
     </main>
@@ -180,12 +190,15 @@ function WorkspaceApp({ session }: { session: AppSession }) {
       {modal === "editTerm" && selectedTerm && termFormValues && <TermForm busy={saving} initial={termFormValues} onCancel={closeModal} onSave={(values) => void mutate(() => updateTerm(workspaceId, selectedTerm.id, values))}/>}
       {modal === "week" && <WeekForm busy={saving} next={nextWeekNumber} onCancel={closeModal} onSave={(values) => void mutate(async () => { const reference = await addWeek(workspaceId, selectedTermId, values); setExpandedWeek(reference.id); })}/>}
       {modal === "editWeek" && editingWeek && <WeekForm busy={saving} next={editingWeek.number} initial={editingWeek} onCancel={closeModal} onSave={(values) => void mutate(() => updateWeek(workspaceId, selectedTermId, editingWeek, { title: values.title, startDate: values.startDate, endDate: values.endDate }))}/>}
-      {modal === "lesson" && <LessonForm busy={saving} onCancel={closeModal} onSave={(values) => void mutate(() => addLesson(workspaceId, selectedTermId, expandedWeek, values))}/>}
+      {modal === "lesson" && lessonTarget && <LessonSetupForm workspaceId={workspaceId} terms={terms} defaultTermId={lessonTarget.termId} defaultWeekId={lessonTarget.weekId} busy={saving} onCancel={closeModal} onSave={(values) => void mutate(async () => {
+        await addLesson(workspaceId, values.termId, values.weekId, { title: values.title, summary: values.summary });
+        setSelectedTermId(values.termId); setExpandedWeek(values.weekId);
+      })}/>}
     </Modal>}
   </div>;
 }
 
-function AuthPage({ setupError }: { setupError: string }) {
+function AuthPage({ setupError, theme, onThemeChange }: { setupError: string; theme: ThemeName; onThemeChange: (theme: ThemeName) => void }) {
   const [signup, setSignup] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState(setupError);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); setError("");
@@ -195,7 +208,7 @@ function AuthPage({ setupError }: { setupError: string }) {
       else await signInWithEmailAndPassword(auth, String(data.get("email")), String(data.get("password")));
     } catch (reason) { setError(friendlyError(reason)); } finally { setBusy(false); }
   }
-  return <div className="auth-layout theme-dense"><section className="auth-art-panel"><a className="brand inverse"><span className="brand-icon"><GraduationCap size={20}/></span><b>Teaching Assistant</b></a><div className="auth-message"><span className="quote">“</span><h1>Good teaching begins with a little <em>room to think.</em></h1><p>Make a plan. Find your rhythm. Be ready for the moments that matter.</p><small>— A CALMER WAY TO PREPARE</small></div><div className="auth-lines"/></section><section className="auth-form-panel"><div className="auth-form-inner"><span className="overline"><i/> WELCOME TO YOUR TEACHING SPACE</span><h2>{signup ? "Make this space yours." : "Good to have you back."}</h2><p>{signup ? "Create an account. We’ll set up your personal workspace automatically." : "Sign in to pick up where your planning left off."}</p>{error && <div className="form-error">{error}</div>}<form onSubmit={submit} className="form">{signup && <label>Your name<input name="name" autoComplete="name" required placeholder="Ama Mensah"/></label>}<label>Email address<input name="email" type="email" autoComplete="email" required placeholder="you@school.edu"/></label><label>Password<input name="password" type="password" minLength={6} autoComplete={signup ? "new-password" : "current-password"} required placeholder="At least 6 characters"/></label><button className="button dark full" disabled={busy}>{busy ? "Please wait…" : signup ? "Create account" : "Sign in"}<ArrowRight size={16}/></button></form><div className="auth-switch">{signup ? "Already have an account?" : "New to Teaching Assistant?"} <button onClick={() => {setSignup(!signup);setError("");}}>{signup ? "Sign in" : "Create an account"}</button></div><div className="privacy"><Check size={14}/> Your plans are private to your workspace.</div></div></section></div>;
+  return <div className="auth-layout"><section className="auth-art-panel"><a className="brand inverse"><span className="brand-icon"><GraduationCap size={20}/></span><b>Teaching Assistant</b></a><div className="auth-message"><span className="quote">“</span><h1>Good teaching begins with a little <em>room to think.</em></h1><p>Make a plan. Find your rhythm. Be ready for the moments that matter.</p><small>— A CALMER WAY TO PREPARE</small></div><div className="auth-lines"/></section><section className="auth-form-panel"><div className="auth-form-inner"><ThemeSwitch className="auth-theme-switch" theme={theme} onChange={onThemeChange}/><span className="overline"><i/> WELCOME TO YOUR TEACHING SPACE</span><h2>{signup ? "Make this space yours." : "Good to have you back."}</h2><p>{signup ? "Create an account. We’ll set up your personal workspace automatically." : "Sign in to pick up where your planning left off."}</p>{error && <div className="form-error">{error}</div>}<form onSubmit={submit} className="form">{signup && <label>Your name<input name="name" autoComplete="name" required placeholder="Ama Mensah"/></label>}<label>Email address<input name="email" type="email" autoComplete="email" required placeholder="you@school.edu"/></label><label>Password<input name="password" type="password" minLength={6} autoComplete={signup ? "new-password" : "current-password"} required placeholder="At least 6 characters"/></label><button className="button dark full" disabled={busy}>{busy ? "Please wait…" : signup ? "Create account" : "Sign in"}<ArrowRight size={16}/></button></form><div className="auth-switch">{signup ? "Already have an account?" : "New to Teaching Assistant?"} <button onClick={() => {setSignup(!signup);setError("");}}>{signup ? "Sign in" : "Create an account"}</button></div><div className="privacy"><Check size={14}/> Your plans are private to your workspace.</div></div></section></div>;
 }
 
 function TermForm({ busy, initial, onCancel, onSave }: { busy: boolean; initial?: TermValues; onCancel: () => void; onSave: (value: TermValues) => void }) {
@@ -205,10 +218,6 @@ function TermForm({ busy, initial, onCancel, onSave }: { busy: boolean; initial?
 function WeekForm({ busy, next, initial, onCancel, onSave }: { busy: boolean; next: number; initial?: WeekRow; onCancel: () => void; onSave: (value: WeekValues) => void }) {
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const number = initial?.number ?? Number(data.get("number")); onSave({ number, title: String(data.get("title")).trim(), startDate: String(data.get("start") || "") || null, endDate: String(data.get("end") || "") || null, sortOrder: initial?.sortOrder ?? number }); }
   return <form className="modal-form" onSubmit={submit}><p>{initial ? "Week number stays fixed; use the arrows on the plan to change its order." : "Choose a unique week number. Fully dated weeks in the same term cannot overlap."}</p><div className="two-cols"><label>Week number<input name="number" type="number" min="1" step="1" required defaultValue={initial?.number ?? next} disabled={!!initial}/></label><label>Display name<input name="title" defaultValue={initial?.title} placeholder={`Week ${initial?.number ?? next}`}/></label></div><div className="two-cols"><label>Starts<input type="date" name="start" defaultValue={initial?.startDate || ""}/></label><label>Ends<input type="date" name="end" defaultValue={initial?.endDate || ""}/></label></div><ModalActions busy={busy} onCancel={onCancel} label={initial ? "Save week" : "Add week"}/></form>;
-}
-function LessonForm({ busy, onCancel, onSave }: { busy: boolean; onCancel: () => void; onSave: (value: { title: string; summary: string }) => void }) {
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); onSave({ title: String(data.get("title")).trim(), summary: String(data.get("summary")).trim() }); }
-  return <form className="modal-form" onSubmit={submit}><p>Start with a title. You can add curriculum links, notes, and materials afterward.</p><label>Lesson title<input name="title" required autoFocus placeholder="Fractions in everyday life"/></label><label>Short summary<textarea name="summary" rows={3} placeholder="What will learners explore?"/></label><ModalActions busy={busy} onCancel={onCancel} label="Save as draft"/></form>;
 }
 function ModalActions({ busy, onCancel, label }: { busy: boolean; onCancel: () => void; label: string }) { return <div className="modal-actions"><button type="button" className="button outlined" onClick={onCancel}>Cancel</button><button className="button dark" disabled={busy}>{busy ? "Saving…" : label}<ArrowRight size={15}/></button></div>; }
 function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) { return <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal"><button type="button" className="close" onClick={onClose} aria-label="Close"><X size={18}/></button><span className="overline"><i/> {subtitle}</span><h2>{title}</h2>{children}</section></div>; }
@@ -227,7 +236,7 @@ function LessonItem({ lesson, index, onOpen, onStatus, onArchive }: { lesson: Le
 function CurriculumView({ workspaceId }: { workspaceId: string }) { return <CurriculumBrowser workspaceId={workspaceId} />; }
 function AccountView({ session }: { session: AppSession }) { return <section className="content secondary"><div className="overline"><i/> YOUR ACCOUNT</div><h1>Your teaching <em>space.</em></h1><p className="intro">The personal account and workspace that keep your plans together.</p><div className="account-card"><span className="avatar-lg">{initial(session.user.displayName)}</span><div><b>{session.user.displayName || "Educator"}</b><small>{session.user.email}</small></div><span className="owner-tag"><Check size={13}/> Personal owner</span></div><button className="button outlined" onClick={() => auth && void signOut(auth)}><LogOut size={15}/> Sign out</button></section>; }
 
-function ConfigNotice() { return <div className="center-screen"><div className="notice-card"><span className="brand-icon"><GraduationCap size={20}/></span><span className="overline"><i/> ONE QUICK SETUP</span><h1>Connect your Firebase project.</h1><p>The app is ready to run. Copy <code>.env.example</code> to <code>.env</code> and fill in the six Firebase web app values from your Firebase project.</p><pre>cp .env.example .env</pre></div></div>; }
+function ConfigNotice({ theme, onThemeChange }: { theme: ThemeName; onThemeChange: (theme: ThemeName) => void }) { return <div className="center-screen"><div className="notice-card"><div className="notice-top"><span className="brand-icon"><GraduationCap size={20}/></span><ThemeSwitch theme={theme} onChange={onThemeChange}/></div><span className="overline"><i/> ONE QUICK SETUP</span><h1>Connect your Firebase project.</h1><p>The app is ready to run. Copy <code>.env.example</code> to <code>.env</code> and fill in the six Firebase web app values from your Firebase project.</p><pre>cp .env.example .env</pre></div></div>; }
 function NavButton({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) { return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>{icon}{children}{active && <i/>}</button>; }
 function Stat({ icon, label, value, detail, tone }: { icon: ReactNode; label: string; value: string; detail: string; tone: string }) { return <article className={`stat ${tone}`}><div className="stat-top"><span>{icon}</span><b>{label}</b></div><strong>{value}</strong><small>{detail}</small></article>; }
 function Empty({ icon, eyebrow, title, body, action, onClick }: { icon: ReactNode; eyebrow: string; title: string; body: string; action: string; onClick: () => void }) { return <div className="empty"><span className="empty-icon">{icon}</span><span className="overline">{eyebrow}</span><h3>{title}</h3><p>{body}</p><button className="button dark" onClick={onClick}><Plus size={15}/>{action}</button></div>; }

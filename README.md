@@ -78,8 +78,12 @@ is synthetic test data only; do not import it into a live workspace.
 
 - Email/password sign-up and sign-in, with a personal workspace created on
   first sign-in.
+- Two appearances — Warm Light (default) and Slate Dark — chosen from a switch in
+  the topbar (and on the sign-in screen), remembered per browser.
 - Workspace-scoped terms, weeks and lessons, including date checks, reserved
   week numbers, reordering, archiving and restoration.
+- Dropdown-based lesson setup: the new-lesson dialog picks the term and week from
+  dropdowns, and the lesson workspace sets status, lesson length and planned date.
 - Lesson details with curriculum links, objectives, teaching steps, assessments,
   notes/links and private file attachments.
 - A transparent, local template-based lesson-plan starter (no LLM/API call).
@@ -91,6 +95,28 @@ workspace switching and a curriculum admin UI need trusted server-side code and
 are intentionally not presented as available controls. Full-text search needs a
 search index or external service; lesson search currently matches titles loaded
 for the selected term.
+
+## Appearance
+
+The switch in the topbar toggles between the original warm editorial palette
+("Warm Light") and the dense dark palette ("Slate Dark"). Warm Light is the
+default; the choice is written to `localStorage` under
+`teaching-assistant.theme` and re-applied by a small inline script in
+`index.html` before first paint, so reloads and new tabs keep the same
+appearance without flashing the other palette. `src/lib/theme.ts` holds the
+parsing, persistence and `<html class="theme-dense">` application; the palettes
+themselves live in `src/styles.css`. The dark palette also declares
+`color-scheme: dark` so native controls and scrollbars match.
+
+## Lesson setup
+
+`Add a lesson to this week` opens a dialog that selects the term and week from
+dropdowns (pre-filled with the week you clicked) and shows the dated weeks of
+whichever term is chosen. Firestore rules keep `weekId` fixed for the life of a
+lesson document, so the placement is chosen at creation; the lesson workspace
+then shows that placement and sets status, lesson length (preset durations plus a
+custom value) and the planned date. Lesson length feeds the lesson-plan starter,
+which splits the total minutes across the six teaching phases.
 
 ## Security and data handling
 
