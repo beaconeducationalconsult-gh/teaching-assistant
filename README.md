@@ -141,6 +141,24 @@ then shows that placement and sets status, lesson length (preset durations plus 
 custom value) and the planned date. Lesson length feeds the lesson-plan starter,
 which splits the total minutes across the six teaching phases.
 
+## Accessibility
+
+- Dialogs are real dialogs: `src/components/Modal.tsx` sets
+  `role="dialog"`/`aria-modal`, labels the dialog with its heading, closes on
+  Escape or a backdrop click, keeps Tab inside while open, locks page scroll and
+  returns focus to the control that opened it.
+- The sidebar marks the current view with `aria-current="page"`, and icon-only
+  controls (help, sign out, archive, close) carry `aria-label`s instead of relying
+  on an icon or a `title` tooltip.
+- A "Skip to content" link is the first focusable element and jumps to the main
+  landmark.
+- Keyboard focus is always visible (`:focus-visible`), while fields keep their
+  existing focus ring instead of doubling up.
+- `prefers-reduced-motion: reduce` removes transitions and animations; the
+  loading ring keeps turning because it conveys progress rather than decoration.
+- Type never renders below 10px and every text token clears 4.5:1 contrast, both
+  enforced by `tests/palette.test.ts`.
+
 ## Security and data handling
 
 Workspace membership documents define read access. Owners/admins/editors can
@@ -155,7 +173,8 @@ credentials guidance.
 
 - `src/App.tsx` — auth boundary and term/week planning UI.
 - `src/components/` — curriculum browser/picker, lesson workspace, assessment
-  builder and lesson-plan starter.
+  builder, lesson-plan starter, appearance switch, lesson setup dialog and the
+  shared modal/navigation controls.
 - `src/lib/theme.ts` — appearance preference: parsing, persistence and applying it
   to the document.
 - `src/lib/lessonSetup.ts` — duration presets/custom parsing and week selection for
@@ -163,8 +182,8 @@ credentials guidance.
 - `src/lib/` — Firebase access, planning data operations and validation.
 - `src/types/models.ts` — Firestore record types.
 - `scripts/` — audited curriculum normalizer/importer.
-- `tests/` — validation, lesson setup, appearance, palette and Firestore/Storage
-  rules tests.
+- `tests/` — validation, lesson setup, appearance, palette, dialog/navigation
+  accessibility and Firestore/Storage rules tests.
 - `firebase/firestore.rules` and `firebase/storage.rules` — access controls.
 - `firebase/firestore.indexes.json` — composite query indexes.
 - `.github/workflows/ci.yml` — build and test workflow.
