@@ -12,7 +12,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "test": "vitest run tests/validation.test.ts tests/curriculum-importer.test.ts tests/lesson-draft.test.ts tests/theme.test.ts tests/lesson-setup.test.ts tests/lesson-setup-render.test.tsx tests/palette.test.ts",
+    "test": "vitest run tests/validation.test.ts tests/curriculum-importer.test.ts tests/lesson-draft.test.ts tests/theme.test.ts tests/lesson-setup.test.ts tests/lesson-setup-render.test.tsx tests/palette.test.ts tests/a11y.test.tsx",
     "test:watch": "vitest",
     "test:rules": "firebase emulators:exec --only firestore,storage --project demo-teaching-assistant \"vitest run tests/firestore.rules.test.ts tests/storage.rules.test.ts\"",
     "import:curriculum": "tsx scripts/import-curriculum.ts"
