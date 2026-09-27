@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile, type User } from "firebase/auth";
-import { Archive, ArrowRight, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardList, GraduationCap, Layers3, LogOut, Plus, Search, Settings2, Sparkles, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowRight, ArrowUp, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardList, GraduationCap, Layers3, LogOut, Pencil, Plus, RotateCcw, Search, Settings2, Sparkles, X } from "lucide-react";
 import { auth, firebaseConfigured } from "./lib/firebase";
 import { ensureWorkspace } from "./lib/workspace";
-import { addLesson, addTerm, addWeek, archiveLesson, listLessons, listTerms, listWeeks, setLessonStatus, type LessonRow, type TermRow, type WeekRow } from "./lib/planning";
+import { addLesson, addTerm, addWeek, archiveLesson, archiveTerm, archiveWeek, listArchivedTerms, listArchivedWeeks, listLessons, listTerms, listWeeks, reorderWeeks, restoreTerm, restoreWeek, setLessonStatus, updateTerm, updateWeek, type LessonRow, type TermRow, type WeekRow } from "./lib/planning";
 import type { UserProfile } from "./types/models";
 import CurriculumBrowser from "./components/CurriculumBrowser";
 import LessonWorkspace from "./components/LessonWorkspace";
@@ -11,7 +11,9 @@ import type { ReactNode } from "react";
 
 type AppSession = { user: User; profile: UserProfile };
 type View = "planning" | "curriculum" | "account";
-type Modal = "term" | "week" | "lesson" | null;
+type Modal = "term" | "editTerm" | "week" | "editWeek" | "lesson" | null;
+type TermValues = { name: string; academicYear: string; startDate: string | null; endDate: string | null };
+type WeekValues = { number: number; title: string; startDate: string | null; endDate: string | null; sortOrder: number };
 
 export default function App() {
   const [session, setSession] = useState<AppSession | null>(null);
@@ -38,25 +40,34 @@ export default function App() {
 function WorkspaceApp({ session }: { session: AppSession }) {
   const [view, setView] = useState<View>("planning");
   const [terms, setTerms] = useState<TermRow[]>([]);
+  const [archivedTerms, setArchivedTerms] = useState<TermRow[]>([]);
   const [selectedTermId, setSelectedTermId] = useState("");
   const [weeks, setWeeks] = useState<WeekRow[]>([]);
+  const [archivedWeeks, setArchivedWeeks] = useState<WeekRow[]>([]);
   const [lessons, setLessons] = useState<Record<string, LessonRow[]>>({});
   const [expandedWeek, setExpandedWeek] = useState("");
   const [busy, setBusy] = useState(true);
   const [saving, setSaving] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
+  const [editingWeek, setEditingWeek] = useState<WeekRow | null>(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [revision, setRevision] = useState(0);
   const [selectedLesson, setSelectedLesson] = useState<LessonRow | null>(null);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const workspaceId = session.profile.activeWorkspaceId;
 
   useEffect(() => {
     let live = true;
     setBusy(true);
-    listTerms(workspaceId)
-      .then((rows) => { if (live) { setTerms(rows); setSelectedTermId((prev) => rows.some((row) => row.id === prev) ? prev : rows[0]?.id || ""); setError(""); } })
+    Promise.all([listTerms(workspaceId), listArchivedTerms(workspaceId)])
+      .then(([activeRows, archivedRows]) => {
+        if (live) {
+          setTerms(activeRows);
+          setArchivedTerms(archivedRows);
+          setSelectedTermId((previous) => activeRows.some((row) => row.id === previous) ? previous : activeRows[0]?.id || "");
+          setError("");
+        }
+      })
       .catch((reason) => live && setError(friendlyError(reason)))
       .finally(() => live && setBusy(false));
     return () => { live = false; };
@@ -64,9 +75,15 @@ function WorkspaceApp({ session }: { session: AppSession }) {
 
   useEffect(() => {
     let live = true;
-    if (!selectedTermId) { setWeeks([]); setLessons({}); return; }
-    listWeeks(workspaceId, selectedTermId)
-      .then((rows) => { if (live) { setWeeks(rows); setExpandedWeek((prev) => rows.some((week) => week.id === prev) ? prev : rows[0]?.id || ""); } })
+    if (!selectedTermId) { setWeeks([]); setArchivedWeeks([]); setLessons({}); return; }
+    Promise.all([listWeeks(workspaceId, selectedTermId), listArchivedWeeks(workspaceId, selectedTermId)])
+      .then(([activeRows, archivedRows]) => {
+        if (live) {
+          setWeeks(activeRows);
+          setArchivedWeeks(archivedRows);
+          setExpandedWeek((previous) => activeRows.some((week) => week.id === previous) ? previous : activeRows[0]?.id || "");
+        }
+      })
       .catch((reason) => live && setError(friendlyError(reason)));
     return () => { live = false; };
   }, [workspaceId, selectedTermId, revision]);
@@ -83,61 +100,64 @@ function WorkspaceApp({ session }: { session: AppSession }) {
   const selectedTerm = terms.find((term) => term.id === selectedTermId);
   const allLessons = useMemo(() => Object.values(lessons).flat(), [lessons]);
   const visibleLessonCount = allLessons.filter((lesson) => lesson.title.toLowerCase().includes(search.toLowerCase())).length;
+  const nextWeekNumber = weeks.reduce((maximum, week) => Math.max(maximum, week.number), 0) + 1;
 
   async function mutate(action: () => Promise<unknown>) {
     setSaving(true); setError("");
-    try { await action(); setModal(null); setRevision((n) => n + 1); }
+    try { await action(); setModal(null); setEditingWeek(null); setRevision((number) => number + 1); }
     catch (reason) { setError(friendlyError(reason)); }
     finally { setSaving(false); }
   }
 
+  function closeModal() { setModal(null); setEditingWeek(null); }
+  function archiveCurrentTerm() {
+    if (selectedTerm && window.confirm(`Archive “${selectedTerm.name}”? Its weeks and lessons will stay saved and can be restored later.`)) {
+      void mutate(() => archiveTerm(workspaceId, selectedTerm.id));
+    }
+  }
+
   const page = selectedLesson
-    ? <LessonWorkspace workspaceId={workspaceId} termId={selectedTermId} weekId={selectedLesson.weekId} lesson={selectedLesson} onBack={() => setSelectedLesson(null)} onSaved={() => setRevision((n) => n + 1)} />
+    ? <LessonWorkspace key={selectedLesson.id} workspaceId={workspaceId} termId={selectedTermId} weekId={selectedLesson.weekId} lesson={selectedLesson} onBack={() => setSelectedLesson(null)} onSaved={() => setRevision((number) => number + 1)} />
     : view === "planning"
       ? <section className="content">
         <div className="hero"><div><div className="overline"><i /> YOUR TEACHING SPACE</div><h1>Plan with a little more <em>purpose.</em></h1><p>A thoughtful place to shape the weeks ahead, one lesson at a time.</p></div><div className="hero-graphic" aria-hidden="true"><span className="orb"/><span className="plant-stem"/><i className="leaf leaf-one"/><i className="leaf leaf-two"/><i className="leaf leaf-three"/><span className="hill"/></div></div>
         <div className="stats"><Stat icon={<CalendarDays size={16}/>} label="CURRENT TERM" value={selectedTerm?.name || "No term yet"} detail={selectedTerm?.academicYear || "Start by creating a term"} tone="sand"/><Stat icon={<Layers3 size={16}/>} label="PLANNED WEEKS" value={String(weeks.length).padStart(2,"0")} detail="In this term" tone="sage"/><Stat icon={<BookOpen size={16}/>} label="LESSON PLANS" value={String(allLessons.length).padStart(2,"0")} detail="In this term" tone="blue"/></div>
-        {error && <div className="alert">{error}<button onClick={() => setError("")}><X size={15}/></button></div>}
-        <div className="section-title"><div><span className="overline">THE ROAD AHEAD</span><h2>Your term at a glance</h2><p>Give each week a shape. Add lessons as the ideas come.</p></div><div className="section-controls">{terms.length > 0 && <select value={selectedTermId} onChange={(e) => setSelectedTermId(e.target.value)}>{terms.map((term) => <option key={term.id} value={term.id}>{term.name} · {term.academicYear}</option>)}</select>}<button className="button dark" onClick={() => setModal("term")}><Plus size={15}/> New term</button></div></div>
-        {busy ? <div className="loading-panel"><span className="spinner"/> Loading your plans…</div> : !terms.length ? <Empty icon={<CalendarDays size={24}/>} eyebrow="A FRESH START" title="Your first term starts here." body="Set the dates and name, then build the weeks and lessons that make it yours." action="Create your first term" onClick={() => setModal("term")}/> : !weeks.length ? <Empty icon={<Layers3 size={24}/>} eyebrow="START WITH A WEEK" title="Your term is ready." body="Add its first week to begin planning lessons." action="Add first week" onClick={() => setModal("week")}/> : <div className="week-list">{weeks.map((week) => {
+        {error && <div className="alert">{error}<button onClick={() => setError("")} aria-label="Dismiss message"><X size={15}/></button></div>}
+        <div className="section-title">
+          <div><span className="overline">THE ROAD AHEAD</span><h2>Your term at a glance</h2><p>Give each week a shape. Add lessons as the ideas come.</p></div>
+          <div className="section-controls">
+            {terms.length > 0 && <select aria-label="Select term" value={selectedTermId} onChange={(event) => setSelectedTermId(event.target.value)}>{terms.map((term) => <option key={term.id} value={term.id}>{term.name} · {term.academicYear}</option>)}</select>}
+            {selectedTerm && <><button className="button outlined" onClick={() => setModal("editTerm")}><Pencil size={13}/> Edit term</button><button className="icon-only archive-button" title="Archive selected term" onClick={archiveCurrentTerm}><Archive size={15}/></button></>}
+            <button className="button dark" onClick={() => setModal("term")}><Plus size={15}/> New term</button>
+          </div>
+        </div>
+        {busy ? <div className="loading-panel"><span className="spinner"/> Loading your plans…</div> : !terms.length ? <Empty icon={<CalendarDays size={24}/>} eyebrow="A FRESH START" title="Your first term starts here." body="Set the dates and name, then build the weeks and lessons that make it yours." action="Create your first term" onClick={() => setModal("term")}/> : !weeks.length ? <Empty icon={<Layers3 size={24}/>} eyebrow="START WITH A WEEK" title="Your term is ready." body="Add its first week to begin planning lessons." action="Add first week" onClick={() => setModal("week")}/> : <div className="week-list">{weeks.map((week, index) => {
           const opened = expandedWeek === week.id;
           const rows = (lessons[week.id] || []).filter((lesson) => lesson.title.toLowerCase().includes(search.toLowerCase()));
           return <article className={`week-card ${opened ? "opened" : ""}`} key={week.id}>
             <button className="week-head" onClick={() => setExpandedWeek(opened ? "" : week.id)}><span className="week-no">{String(week.number).padStart(2,"0")}</span><span className="week-heading"><b>{week.title || `Week ${week.number}`}</b><small>{dateRange(week.startDate, week.endDate)}</small></span><span className="week-count"><BookOpen size={13}/> {(lessons[week.id] || []).length} lessons</span><ChevronDown className={opened ? "turn" : ""} size={17}/></button>
-            {opened && <div className="week-content">{rows.length ? rows.map((lesson, index) => <LessonItem key={lesson.id} lesson={lesson} index={index} onOpen={() => setSelectedLesson(lesson)} onStatus={(status) => mutate(() => setLessonStatus(workspaceId, selectedTermId, week.id, lesson.id, status))} onArchive={() => { if (window.confirm(`Archive “${lesson.title}”?`)) void mutate(() => archiveLesson(workspaceId, selectedTermId, week.id, lesson.id)); }}/>) : <p className="week-empty">{search ? "No lessons match that search." : "Nothing planned here yet. Start with one small idea."}</p>}<button className="add-lesson" onClick={() => setModal("lesson")}><span><Plus size={14}/></span> Add a lesson to this week</button></div>}
+            {opened && <div className="week-content">{rows.length ? rows.map((lesson, lessonIndex) => <LessonItem key={lesson.id} lesson={lesson} index={lessonIndex} onOpen={() => setSelectedLesson(lesson)} onStatus={(status) => mutate(() => setLessonStatus(workspaceId, selectedTermId, week.id, lesson.id, status))} onArchive={() => { if (window.confirm(`Archive “${lesson.title}”?`)) void mutate(() => archiveLesson(workspaceId, selectedTermId, week.id, lesson.id)); }}/>) : <p className="week-empty">{search ? "No lessons match that search." : "Nothing planned here yet. Start with one small idea."}</p>}
+              <div className="week-actions"><button type="button" className="button outlined" onClick={() => { setEditingWeek(week); setModal("editWeek"); }}><Pencil size={12}/> Edit week</button><button type="button" className="icon-only" title="Move week earlier" aria-label={`Move Week ${week.number} earlier`} disabled={index === 0} onClick={() => index > 0 && void mutate(() => reorderWeeks(workspaceId, selectedTermId, weeks[index - 1], week))}><ArrowUp size={14}/></button><button type="button" className="icon-only" title="Move week later" aria-label={`Move Week ${week.number} later`} disabled={index === weeks.length - 1} onClick={() => index < weeks.length - 1 && void mutate(() => reorderWeeks(workspaceId, selectedTermId, week, weeks[index + 1]))}><ArrowDown size={14}/></button><button type="button" className="icon-only danger-icon" title="Archive week" aria-label={`Archive Week ${week.number}`} onClick={() => { if (window.confirm(`Archive Week ${week.number}? Its lessons will stay saved and can be restored later.`)) void mutate(() => archiveWeek(workspaceId, selectedTermId, week.id)); }}><Archive size={14}/></button></div>
+              <button className="add-lesson" onClick={() => setModal("lesson")}><span><Plus size={14}/></span> Add a lesson to this week</button>
+            </div>}
           </article>;
         })}<button className="add-week" onClick={() => setModal("week")}><span className="add-circle"><Plus size={16}/></span><span><b>Add another week</b><small>Keep your plan moving forward</small></span><ArrowRight size={16}/></button></div>}
-        {!!terms.length && <div className="plan-foot"><span><ClipboardList size={14}/> {visibleLessonCount} lessons match this view</span><label className="search-box"><Search size={14}/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a lesson"/></label></div>}
+        {!!terms.length && <div className="plan-foot"><span><ClipboardList size={14}/> {visibleLessonCount} lessons match this view</span><label className="search-box"><Search size={14}/><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Find a lesson"/></label></div>}
+        {!!archivedWeeks.length && <ArchivedWeeks weeks={archivedWeeks} onEdit={(week) => { setEditingWeek(week); setModal("editWeek"); }} onRestore={(week) => void mutate(() => restoreWeek(workspaceId, selectedTermId, week))}/>}
+        {!!archivedTerms.length && <ArchivedTerms terms={archivedTerms} onRestore={(term) => void mutate(() => restoreTerm(workspaceId, term))}/>}
       </section>
       : view === "curriculum" ? <CurriculumView workspaceId={workspaceId}/>
       : <AccountView session={session}/>;
 
+  const termFormValues = selectedTerm ? {
+    name: selectedTerm.name, academicYear: selectedTerm.academicYear,
+    startDate: selectedTerm.startDate, endDate: selectedTerm.endDate,
+  } : null;
+
   return <div className="layout theme-dense">
     <aside className="sidebar">
-      <a className="brand" href="#planning" onClick={(e) => { e.preventDefault(); setView("planning"); }}><span className="brand-icon"><GraduationCap size={20} /></span><span><b>Teaching Assistant</b><small>KL AZRUM · PLANNER</small></span></a>
-      <div className="workspace-picker">
-        <button
-          type="button"
-          className={`workspace-switch ${workspaceMenuOpen ? "open" : ""}`}
-          aria-expanded={workspaceMenuOpen}
-          aria-haspopup="menu"
-          onClick={() => setWorkspaceMenuOpen((open) => !open)}
-        >
-          <span className="avatar-sm">{initial(session.user.displayName)}</span>
-          <span><b>{session.user.displayName || "My workspace"}</b><small>Personal workspace</small></span>
-          <ChevronDown className={workspaceMenuOpen ? "workspace-chevron open" : "workspace-chevron"} size={15} />
-        </button>
-        {workspaceMenuOpen && (
-          <div className="workspace-menu" role="menu">
-            <div className="workspace-menu-label">YOUR WORKSPACES</div>
-            <button type="button" className="workspace-option active" role="menuitem" onClick={() => setWorkspaceMenuOpen(false)}>
-              <span className="avatar-sm">{initial(session.user.displayName)}</span>
-              <span><b>{session.user.displayName || "My workspace"}</b><small>Personal workspace</small></span>
-              <Check size={14} />
-            </button>
-          </div>
-        )}
-      </div>
+      <a className="brand" href="#planning" onClick={(event) => { event.preventDefault(); setView("planning"); }}><span className="brand-icon"><GraduationCap size={20} /></span><span><b>Teaching Assistant</b><small>KL AZRUM · PLANNER</small></span></a>
+      <div className="workspace-picker"><div className="workspace-switch" aria-label="Personal workspace"><span className="avatar-sm">{initial(session.user.displayName)}</span><span><b>{session.user.displayName || "My teaching workspace"}</b><small>Personal workspace · current</small></span></div></div>
       <div className="side-label">WORKSPACE</div>
       <nav className="nav-list">
         <NavButton active={view === "planning"} icon={<CalendarDays size={17} />} onClick={() => setView("planning")}>My planning</NavButton>
@@ -155,8 +175,12 @@ function WorkspaceApp({ session }: { session: AppSession }) {
       {page}
       <footer className="footer"><span>TEACHING ASSISTANT <i>·</i> A CLEARER WAY TO PLAN</span><span>Made for the work that matters.</span></footer>
     </main>
-    {modal && <Modal title={modal === "term" ? "A new term, a fresh start." : modal === "week" ? "Add a week to the plan." : "Start with a lesson idea."} subtitle={modal === "term" ? "SET THE SEASON" : modal === "week" ? "SHAPE THE TIMELINE" : "MAKE IT CONCRETE"} onClose={() => setModal(null)}>
-      {modal === "term" ? <TermForm busy={saving} onCancel={() => setModal(null)} onSave={(values) => mutate(() => addTerm(workspaceId, values))}/> : modal === "week" ? <WeekForm busy={saving} next={weeks.length + 1} onCancel={() => setModal(null)} onSave={(values) => mutate(() => addWeek(workspaceId, selectedTermId, values))}/> : <LessonForm busy={saving} onCancel={() => setModal(null)} onSave={(values) => mutate(() => addLesson(workspaceId, selectedTermId, expandedWeek, values))}/>}
+    {modal && <Modal title={modal === "term" ? "A new term, a fresh start." : modal === "editTerm" ? "Adjust this term." : modal === "week" ? "Add a week to the plan." : modal === "editWeek" ? "Adjust this week." : "Start with a lesson idea."} subtitle={modal.includes("Term") || modal === "term" ? "SET THE SEASON" : modal.includes("Week") || modal === "week" ? "SHAPE THE TIMELINE" : "MAKE IT CONCRETE"} onClose={closeModal}>
+      {modal === "term" && <TermForm busy={saving} onCancel={closeModal} onSave={(values) => void mutate(async () => { const reference = await addTerm(workspaceId, values); setSelectedTermId(reference.id); })}/>}
+      {modal === "editTerm" && selectedTerm && termFormValues && <TermForm busy={saving} initial={termFormValues} onCancel={closeModal} onSave={(values) => void mutate(() => updateTerm(workspaceId, selectedTerm.id, values))}/>}
+      {modal === "week" && <WeekForm busy={saving} next={nextWeekNumber} onCancel={closeModal} onSave={(values) => void mutate(async () => { const reference = await addWeek(workspaceId, selectedTermId, values); setExpandedWeek(reference.id); })}/>}
+      {modal === "editWeek" && editingWeek && <WeekForm busy={saving} next={editingWeek.number} initial={editingWeek} onCancel={closeModal} onSave={(values) => void mutate(() => updateWeek(workspaceId, selectedTermId, editingWeek, { title: values.title, startDate: values.startDate, endDate: values.endDate }))}/>}
+      {modal === "lesson" && <LessonForm busy={saving} onCancel={closeModal} onSave={(values) => void mutate(() => addLesson(workspaceId, selectedTermId, expandedWeek, values))}/>}
     </Modal>}
   </div>;
 }
@@ -174,27 +198,34 @@ function AuthPage({ setupError }: { setupError: string }) {
   return <div className="auth-layout theme-dense"><section className="auth-art-panel"><a className="brand inverse"><span className="brand-icon"><GraduationCap size={20}/></span><b>Teaching Assistant</b></a><div className="auth-message"><span className="quote">“</span><h1>Good teaching begins with a little <em>room to think.</em></h1><p>Make a plan. Find your rhythm. Be ready for the moments that matter.</p><small>— A CALMER WAY TO PREPARE</small></div><div className="auth-lines"/></section><section className="auth-form-panel"><div className="auth-form-inner"><span className="overline"><i/> WELCOME TO YOUR TEACHING SPACE</span><h2>{signup ? "Make this space yours." : "Good to have you back."}</h2><p>{signup ? "Create an account. We’ll set up your personal workspace automatically." : "Sign in to pick up where your planning left off."}</p>{error && <div className="form-error">{error}</div>}<form onSubmit={submit} className="form">{signup && <label>Your name<input name="name" autoComplete="name" required placeholder="Ama Mensah"/></label>}<label>Email address<input name="email" type="email" autoComplete="email" required placeholder="you@school.edu"/></label><label>Password<input name="password" type="password" minLength={6} autoComplete={signup ? "new-password" : "current-password"} required placeholder="At least 6 characters"/></label><button className="button dark full" disabled={busy}>{busy ? "Please wait…" : signup ? "Create account" : "Sign in"}<ArrowRight size={16}/></button></form><div className="auth-switch">{signup ? "Already have an account?" : "New to Teaching Assistant?"} <button onClick={() => {setSignup(!signup);setError("");}}>{signup ? "Sign in" : "Create an account"}</button></div><div className="privacy"><Check size={14}/> Your plans are private to your workspace.</div></div></section></div>;
 }
 
-function TermForm({ busy, onCancel, onSave }: { busy: boolean; onCancel: () => void; onSave: (value: { name: string; academicYear: string; startDate: string | null; endDate: string | null }) => void }) {
+function TermForm({ busy, initial, onCancel, onSave }: { busy: boolean; initial?: TermValues; onCancel: () => void; onSave: (value: TermValues) => void }) {
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); onSave({ name: String(data.get("name")).trim(), academicYear: String(data.get("year")).trim(), startDate: String(data.get("start") || "") || null, endDate: String(data.get("end") || "") || null }); }
-  return <form className="modal-form" onSubmit={submit}><p>Set the name and academic year. Dates can be filled in later.</p><label>Term name<input name="name" required autoFocus placeholder="First Term"/></label><label>Academic year<input name="year" required placeholder="2026/2027"/></label><div className="two-cols"><label>Starts<input type="date" name="start"/></label><label>Ends<input type="date" name="end"/></label></div><ModalActions busy={busy} onCancel={onCancel} label="Create term"/></form>;
+  return <form className="modal-form" onSubmit={submit}><p>Set the name and academic year. If dates are entered, the end date must be on or after the start date.</p><label>Term name<input name="name" required autoFocus={!initial} defaultValue={initial?.name} placeholder="First Term"/></label><label>Academic year<input name="year" required defaultValue={initial?.academicYear} placeholder="2026/2027"/></label><div className="two-cols"><label>Starts<input type="date" name="start" defaultValue={initial?.startDate || ""}/></label><label>Ends<input type="date" name="end" defaultValue={initial?.endDate || ""}/></label></div><ModalActions busy={busy} onCancel={onCancel} label={initial ? "Save term" : "Create term"}/></form>;
 }
-function WeekForm({ busy, next, onCancel, onSave }: { busy: boolean; next: number; onCancel: () => void; onSave: (value: { number: number; title: string; startDate: string | null; endDate: string | null; sortOrder: number }) => void }) {
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const number = Number(data.get("number")); onSave({ number, title: String(data.get("title")).trim(), startDate: String(data.get("start") || "") || null, endDate: String(data.get("end") || "") || null, sortOrder: number }); }
-  return <form className="modal-form" onSubmit={submit}><p>Give this week a number. Add dates now or adjust the timeline later.</p><div className="two-cols"><label>Week number<input name="number" type="number" min="1" required defaultValue={next}/></label><label>Display name<input name="title" placeholder={`Week ${next}`}/></label></div><div className="two-cols"><label>Starts<input type="date" name="start"/></label><label>Ends<input type="date" name="end"/></label></div><ModalActions busy={busy} onCancel={onCancel} label="Add week"/></form>;
+function WeekForm({ busy, next, initial, onCancel, onSave }: { busy: boolean; next: number; initial?: WeekRow; onCancel: () => void; onSave: (value: WeekValues) => void }) {
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); const number = initial?.number ?? Number(data.get("number")); onSave({ number, title: String(data.get("title")).trim(), startDate: String(data.get("start") || "") || null, endDate: String(data.get("end") || "") || null, sortOrder: initial?.sortOrder ?? number }); }
+  return <form className="modal-form" onSubmit={submit}><p>{initial ? "Week number stays fixed; use the arrows on the plan to change its order." : "Choose a unique week number. Fully dated weeks in the same term cannot overlap."}</p><div className="two-cols"><label>Week number<input name="number" type="number" min="1" step="1" required defaultValue={initial?.number ?? next} disabled={!!initial}/></label><label>Display name<input name="title" defaultValue={initial?.title} placeholder={`Week ${initial?.number ?? next}`}/></label></div><div className="two-cols"><label>Starts<input type="date" name="start" defaultValue={initial?.startDate || ""}/></label><label>Ends<input type="date" name="end" defaultValue={initial?.endDate || ""}/></label></div><ModalActions busy={busy} onCancel={onCancel} label={initial ? "Save week" : "Add week"}/></form>;
 }
 function LessonForm({ busy, onCancel, onSave }: { busy: boolean; onCancel: () => void; onSave: (value: { title: string; summary: string }) => void }) {
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); onSave({ title: String(data.get("title")).trim(), summary: String(data.get("summary")).trim() }); }
   return <form className="modal-form" onSubmit={submit}><p>Start with a title. You can add curriculum links, notes, and materials afterward.</p><label>Lesson title<input name="title" required autoFocus placeholder="Fractions in everyday life"/></label><label>Short summary<textarea name="summary" rows={3} placeholder="What will learners explore?"/></label><ModalActions busy={busy} onCancel={onCancel} label="Save as draft"/></form>;
 }
 function ModalActions({ busy, onCancel, label }: { busy: boolean; onCancel: () => void; label: string }) { return <div className="modal-actions"><button type="button" className="button outlined" onClick={onCancel}>Cancel</button><button className="button dark" disabled={busy}>{busy ? "Saving…" : label}<ArrowRight size={15}/></button></div>; }
-function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) { return <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}><section className="modal"><button className="close" onClick={onClose} aria-label="Close"><X size={18}/></button><span className="overline"><i/> {subtitle}</span><h2>{title}</h2>{children}</section></div>; }
+function Modal({ title, subtitle, onClose, children }: { title: string; subtitle: string; onClose: () => void; children: ReactNode }) { return <div className="backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal"><button type="button" className="close" onClick={onClose} aria-label="Close"><X size={18}/></button><span className="overline"><i/> {subtitle}</span><h2>{title}</h2>{children}</section></div>; }
+
+function ArchivedTerms({ terms, onRestore }: { terms: TermRow[]; onRestore: (term: TermRow) => void }) {
+  return <details className="archived-panel"><summary>Archived terms ({terms.length})</summary><div className="archived-records">{terms.map((term) => <div className="archived-record" key={term.id}><span><b>{term.name}</b><small>{term.academicYear}</small></span><button className="button outlined" onClick={() => onRestore(term)}><RotateCcw size={12}/> Restore</button></div>)}</div></details>;
+}
+function ArchivedWeeks({ weeks, onEdit, onRestore }: { weeks: WeekRow[]; onEdit: (week: WeekRow) => void; onRestore: (week: WeekRow) => void }) {
+  return <details className="archived-panel"><summary>Archived weeks ({weeks.length})</summary><div className="archived-records">{weeks.map((week) => <div className="archived-record" key={week.id}><span><b>Week {week.number}{week.title ? ` · ${week.title}` : ""}</b><small>{dateRange(week.startDate, week.endDate)}</small></span><div className="archived-record-actions"><button className="button outlined" onClick={() => onEdit(week)}><Pencil size={12}/> Edit</button><button className="button outlined" onClick={() => onRestore(week)}><RotateCcw size={12}/> Restore</button></div></div>)}</div></details>;
+}
 
 function LessonItem({ lesson, index, onOpen, onStatus, onArchive }: { lesson: LessonRow; index: number; onOpen: () => void; onStatus: (status: LessonRow["status"]) => void; onArchive: () => void }) {
-  return <div className="lesson-row"><span className={`lesson-index idx-${index%4}`}>{String(index+1).padStart(2,"0")}</span><button type="button" className="lesson-copy" onClick={onOpen}><b>{lesson.title}</b><small>{lesson.summary || "Add a summary when you are ready"}</small></button><select className={`status status-${lesson.status}`} value={lesson.status} onChange={(e) => onStatus(e.target.value as LessonRow["status"])} aria-label={`Status of ${lesson.title}`}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select><button className="icon-only archive-button" title="Archive lesson" onClick={onArchive}><Archive size={15}/></button></div>;
+  return <div className="lesson-row"><span className={`lesson-index idx-${index%4}`}>{String(index+1).padStart(2,"0")}</span><button type="button" className="lesson-copy" onClick={onOpen}><b>{lesson.title}</b><small>{lesson.summary || "Add a summary when you are ready"}</small></button><select className={`status status-${lesson.status}`} value={lesson.status} onChange={(event) => onStatus(event.target.value as LessonRow["status"])} aria-label={`Status of ${lesson.title}`}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select><button type="button" className="icon-only archive-button" title="Archive lesson" onClick={onArchive}><Archive size={15}/></button></div>;
 }
 
 function CurriculumView({ workspaceId }: { workspaceId: string }) { return <CurriculumBrowser workspaceId={workspaceId} />; }
-function AccountView({ session }: { session: AppSession }) { return <section className="content secondary"><div className="overline"><i/> YOUR ACCOUNT</div><h1>Your teaching <em>space.</em></h1><p className="intro">The account and workspace that keep your plans together.</p><div className="account-card"><span className="avatar-lg">{initial(session.user.displayName)}</span><div><b>{session.user.displayName || "Educator"}</b><small>{session.user.email}</small></div><span className="owner-tag"><Check size={13}/> Owner</span></div><button className="button outlined" onClick={() => auth && void signOut(auth)}><LogOut size={15}/> Sign out</button></section>; }
+function AccountView({ session }: { session: AppSession }) { return <section className="content secondary"><div className="overline"><i/> YOUR ACCOUNT</div><h1>Your teaching <em>space.</em></h1><p className="intro">The personal account and workspace that keep your plans together.</p><div className="account-card"><span className="avatar-lg">{initial(session.user.displayName)}</span><div><b>{session.user.displayName || "Educator"}</b><small>{session.user.email}</small></div><span className="owner-tag"><Check size={13}/> Personal owner</span></div><button className="button outlined" onClick={() => auth && void signOut(auth)}><LogOut size={15}/> Sign out</button></section>; }
 
 function ConfigNotice() { return <div className="center-screen"><div className="notice-card"><span className="brand-icon"><GraduationCap size={20}/></span><span className="overline"><i/> ONE QUICK SETUP</span><h1>Connect your Firebase project.</h1><p>The app is ready to run. Copy <code>.env.example</code> to <code>.env</code> and fill in the six Firebase web app values from your Firebase project.</p><pre>cp .env.example .env</pre></div></div>; }
 function NavButton({ active, icon, children, onClick }: { active: boolean; icon: ReactNode; children: ReactNode; onClick: () => void }) { return <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>{icon}{children}{active && <i/>}</button>; }
@@ -207,7 +238,7 @@ function friendlyError(reason: unknown) {
   if (error?.code === "auth/email-already-in-use") return "An account already uses this email. Sign in instead.";
   if (["auth/invalid-credential", "auth/user-not-found", "auth/wrong-password"].includes(error?.code || "")) return "That email and password did not match.";
   if (error?.code === "auth/weak-password") return "Choose a password with at least six characters.";
-  if (error?.code === "permission-denied") return "Firebase denied this action. Deploy the Firestore rules and check Authentication settings.";
+  if (error?.code === "permission-denied") return "Firebase denied this action. Deploy the Firestore and Storage rules and check Authentication settings.";
   if (error?.code === "failed-precondition") return "A Firestore index is needed. Deploy firebase/firestore.indexes.json.";
   return error?.message || "Something went wrong. Please try again.";
 }

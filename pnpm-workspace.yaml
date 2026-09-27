@@ -1,4 +1,6 @@
+# Explicitly approve required dependency setup scripts; skip the optional native RE2 build.
 allowBuilds:
-  '@firebase/util': set this to true or false
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
+  '@firebase/util': true
+  esbuild: true
+  protobufjs: true
+  re2: false

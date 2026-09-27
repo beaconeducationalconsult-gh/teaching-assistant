@@ -3,7 +3,8 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function isMember(workspaceId) {
-      return signedIn() && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+      return signedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
     }
     function role(workspaceId) {
       return get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role;
@@ -11,74 +12,316 @@ service cloud.firestore {
     function canEdit(workspaceId) {
       return isMember(workspaceId) && role(workspaceId) in ['owner', 'admin', 'editor'];
     }
-    function isOwner(workspaceId) { return isMember(workspaceId) && role(workspaceId) == 'owner'; }
-    function validTimes() {
-      return request.resource.data.createdAt is timestamp && request.resource.data.updatedAt is timestamp;
+    function isOwner(workspaceId) {
+      return isMember(workspaceId) && role(workspaceId) == 'owner';
+    }
+    function isActiveTerm(workspaceId, termId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/terms/$(termId)).data.archivedAt == null;
+    }
+    function hasValidWeekNumberLock(workspaceId, termId, weekId, number) {
+      let lockPath = /databases/$(database)/documents/workspaces/$(workspaceId)/terms/$(termId)/weekNumberLocks/$(number);
+      return existsAfter(lockPath)
+        && getAfter(lockPath).data.number == number
+        && getAfter(lockPath).data.weekId == weekId;
+    }
+    function lockHasWeek(workspaceId, termId, data) {
+      let weekPath = /databases/$(database)/documents/workspaces/$(workspaceId)/terms/$(termId)/weeks/$(data.weekId);
+      return existsAfter(weekPath)
+        && getAfter(weekPath).data.termId == termId
+        && getAfter(weekPath).data.number == data.number;
+    }
+    function validTimes(data) {
+      return data.createdAt is timestamp && data.updatedAt is timestamp;
+    }
+    function validArchivedAt(data) {
+      return data.archivedAt == null || data.archivedAt is timestamp;
+    }
+    function validDateOnly(value) {
+      return value == null
+        || (value is string && value.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'));
+    }
+    function unchangedCreatedAt() {
+      return request.resource.data.createdAt == resource.data.createdAt;
+    }
+    function validWorkspace(data) {
+      return data.keys().hasOnly(['name', 'ownerUid', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.name is string && data.ownerUid is string
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validTerm(data) {
+      return data.keys().hasOnly(['name', 'academicYear', 'startDate', 'endDate', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0
+        && data.academicYear is string && data.academicYear.size() > 0
+        && validDateOnly(data.startDate) && validDateOnly(data.endDate)
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validWeek(data) {
+      return data.keys().hasOnly(['termId', 'number', 'title', 'startDate', 'endDate', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.termId is string && data.number is int && data.number > 0
+        && data.title is string && data.sortOrder is int
+        && validDateOnly(data.startDate) && validDateOnly(data.endDate)
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validLesson(data) {
+      return data.keys().hasOnly(['weekId', 'title', 'summary', 'objectives', 'plannedDate', 'durationMinutes', 'status', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.weekId is string && data.title is string && data.title.size() > 0 && data.summary is string && data.objectives is string
+        && validDateOnly(data.plannedDate)
+        && (data.durationMinutes == null || (data.durationMinutes is int && data.durationMinutes > 0))
+        && data.status in ['draft', 'ready', 'taught'] && data.sortOrder is int
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validAssessment(data) {
+      return data.keys().hasOnly(['lessonId', 'title', 'type', 'instructions', 'markingNotes', 'plannedDate', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.lessonId is string && data.title is string && data.title.size() > 0
+        && data.type in ['formative', 'summative', 'practical', 'other']
+        && data.instructions is string && data.markingNotes is string
+        && validDateOnly(data.plannedDate) && data.sortOrder is int
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validAssessmentItem(data) {
+      return data.keys().hasOnly(['assessmentId', 'type', 'prompt', 'marks', 'options', 'answer', 'markingGuide', 'indicatorId', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.assessmentId is string
+        && data.type in ['shortAnswer', 'multipleChoice', 'trueFalse', 'essay', 'practical']
+        && data.prompt is string && data.prompt.size() > 0 && data.marks is int && data.marks > 0
+        && data.options is list && data.answer is string && data.markingGuide is string
+        && (data.indicatorId == null || data.indicatorId is string)
+        && data.sortOrder is int && validArchivedAt(data) && validTimes(data);
+    }
+    function validProvenance(data) {
+      return (!('sourceFile' in data) || data.sourceFile is string)
+        && (!('sourceRecordId' in data) || data.sourceRecordId is string)
+        && (!('sourceFiles' in data) || data.sourceFiles is list)
+        && (!('sourceRecordIds' in data) || data.sourceRecordIds is list)
+        && (!('auditReference' in data) || data.auditReference is string);
+    }
+    function validFramework(data) {
+      return data.keys().hasOnly(['name', 'jurisdiction', 'version', 'effectiveFrom', 'effectiveTo', 'archivedAt', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0
+        && data.jurisdiction is string && data.version is string
+        && validDateOnly(data.effectiveFrom) && validDateOnly(data.effectiveTo)
+        && validArchivedAt(data) && validTimes(data) && validProvenance(data);
+    }
+    function validLevel(data) {
+      return data.keys().hasOnly(['frameworkId', 'code', 'name', 'sortOrder', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.code is string && data.name is string
+        && data.sortOrder is int && data.sortOrder >= 0
+        && validTimes(data) && validProvenance(data);
+    }
+    function validSubject(data) {
+      return data.keys().hasOnly(['frameworkId', 'code', 'name', 'description', 'archivedAt', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.code is string && data.name is string && data.description is string
+        && validArchivedAt(data) && validTimes(data) && validProvenance(data);
+    }
+    function validStrand(data) {
+      return data.keys().hasOnly(['frameworkId', 'levelId', 'subjectId', 'code', 'name', 'description', 'sortOrder', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.levelId is string && data.subjectId is string
+        && data.code is string && data.name is string && data.description is string
+        && data.sortOrder is int && data.sortOrder >= 0 && validTimes(data) && validProvenance(data);
+    }
+    function validSubStrand(data) {
+      return data.keys().hasOnly(['frameworkId', 'levelId', 'subjectId', 'strandId', 'code', 'name', 'description', 'sortOrder', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.levelId is string && data.subjectId is string
+        && data.strandId is string && data.code is string
+        && data.name is string && data.description is string && data.sortOrder is int && data.sortOrder >= 0
+        && validTimes(data) && validProvenance(data);
+    }
+    function validContentStandard(data) {
+      return data.keys().hasOnly(['frameworkId', 'levelId', 'subjectId', 'strandId', 'subStrandId', 'code', 'description', 'sortOrder', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.levelId is string && data.subjectId is string
+        && data.strandId is string && data.subStrandId is string
+        && data.code is string && data.description is string && data.sortOrder is int && data.sortOrder >= 0
+        && validTimes(data) && validProvenance(data);
+    }
+    function validIndicator(data) {
+      return data.keys().hasOnly(['frameworkId', 'levelId', 'subjectId', 'strandId', 'subStrandId', 'contentStandardId', 'code', 'fullCode', 'description', 'sortOrder', 'archivedAt', 'sourceFile', 'sourceRecordId', 'sourceFiles', 'sourceRecordIds', 'auditReference', 'createdAt', 'updatedAt'])
+        && data.frameworkId is string && data.levelId is string && data.subjectId is string
+        && data.strandId is string && data.subStrandId is string
+        && data.contentStandardId is string && data.code is string && data.fullCode is string
+        && data.description is string && data.sortOrder is int && data.sortOrder >= 0
+        && validArchivedAt(data) && validTimes(data) && validProvenance(data);
+    }
+    function validIndicatorLink(data) {
+      return data.keys().hasOnly(['indicatorId', 'fullCode', 'description', 'subjectId', 'subjectName', 'levelId', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.indicatorId is string && data.fullCode is string && data.description is string
+        && data.subjectId is string && data.subjectName is string && data.levelId is string
+        && data.sortOrder is int && validArchivedAt(data) && validTimes(data);
+    }
+    function validResource(data) {
+      return data.keys().hasOnly(['title', 'type', 'url', 'storagePath', 'notes', 'sortOrder', 'contentType', 'sizeBytes', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() > 0 && data.type in ['link', 'file', 'note', 'other']
+        && data.url is string && data.storagePath is string && data.notes is string && data.sortOrder is int
+        && (!('contentType' in data) || data.contentType is string)
+        && (!('sizeBytes' in data) || (data.sizeBytes is int && data.sizeBytes > 0 && data.sizeBytes <= 10485760))
+        && (data.type != 'file' || (data.storagePath.size() > 0 && 'contentType' in data && 'sizeBytes' in data))
+        && validArchivedAt(data) && validTimes(data);
+    }
+    function validTeachingStep(data) {
+      return data.keys().hasOnly(['lessonId', 'title', 'phase', 'instructions', 'minutes', 'sortOrder', 'archivedAt', 'createdAt', 'updatedAt'])
+        && data.lessonId is string && data.title is string && data.phase in ['opening', 'explore', 'explain', 'practice', 'assessment', 'closing']
+        && data.instructions is string && (data.minutes == null || (data.minutes is int && data.minutes > 0))
+        && data.sortOrder is int && validArchivedAt(data) && validTimes(data);
+    }
+    function validDiagram(data) {
+      return data.keys().hasOnly(['title', 'storagePath', 'caption', 'altText', 'createdAt', 'updatedAt'])
+        && data.title is string && data.storagePath is string && data.caption is string && data.altText is string && validTimes(data);
+    }
+    function validLessonChild(childCollection, data, lessonId) {
+      return (childCollection == 'indicatorLinks' && validIndicatorLink(data))
+        || (childCollection == 'resources' && validResource(data))
+        || (childCollection == 'diagrams' && validDiagram(data))
+        || (childCollection == 'teachingSteps' && validTeachingStep(data) && data.lessonId == lessonId);
+    }
+    function unchangedLessonChildIdentity(childCollection) {
+      return (childCollection != 'indicatorLinks' || request.resource.data.indicatorId == resource.data.indicatorId)
+        && (childCollection != 'teachingSteps' || !('lessonId' in resource.data) || request.resource.data.lessonId == resource.data.lessonId);
     }
 
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
       allow create: if signedIn() && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['displayName', 'email', 'activeWorkspaceId', 'createdAt', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.email is string
         && request.resource.data.activeWorkspaceId is string
+        && validTimes(request.resource.data)
         && existsAfter(/databases/$(database)/documents/workspaces/$(request.resource.data.activeWorkspaceId)/members/$(uid));
       allow update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.updatedAt is timestamp;
       allow delete: if false;
     }
 
     match /workspaces/{workspaceId} {
       allow read: if isMember(workspaceId);
       allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.name is string && validTimes();
-      allow update: if isOwner(workspaceId) && request.resource.data.ownerUid == resource.data.ownerUid
-        && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-      allow delete: if isOwner(workspaceId);
+        && validWorkspace(request.resource.data) && request.resource.data.archivedAt == null;
+      allow update: if isOwner(workspaceId) && validWorkspace(request.resource.data)
+        && request.resource.data.ownerUid == resource.data.ownerUid && unchangedCreatedAt();
+      allow delete: if false;
 
       match /members/{uid} {
         allow read: if signedIn() && (uid == request.auth.uid || isOwner(workspaceId));
-        // A user can create only their own first owner membership in the same batch as their workspace.
+        // Initial owner membership is created atomically with its workspace and user profile.
+        // Invites and role changes must be performed by trusted server-side code.
         allow create: if signedIn() && uid == request.auth.uid
-          && request.resource.data.uid == uid && request.resource.data.role == 'owner' && validTimes()
+          && request.resource.data.keys().hasOnly(['uid', 'role', 'createdAt', 'updatedAt'])
+          && request.resource.data.uid == uid && request.resource.data.role == 'owner'
+          && validTimes(request.resource.data)
           && getAfter(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerUid == uid;
         allow update, delete: if false;
       }
 
-      match /curriculumFrameworks/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumLevels/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumSubjects/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumStrands/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumSubStrands/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumContentStandards/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
-      match /curriculumIndicators/{id} { allow read: if isMember(workspaceId); allow create: if canEdit(workspaceId) && validTimes(); allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt; allow delete: if isOwner(workspaceId); }
+      match /curriculumFrameworks/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validFramework(request.resource.data);
+        allow update: if canEdit(workspaceId) && validFramework(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumLevels/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validLevel(request.resource.data);
+        allow update: if canEdit(workspaceId) && validLevel(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumSubjects/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validSubject(request.resource.data);
+        allow update: if canEdit(workspaceId) && validSubject(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumStrands/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validStrand(request.resource.data);
+        allow update: if canEdit(workspaceId) && validStrand(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumSubStrands/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validSubStrand(request.resource.data);
+        allow update: if canEdit(workspaceId) && validSubStrand(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumContentStandards/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validContentStandard(request.resource.data);
+        allow update: if canEdit(workspaceId) && validContentStandard(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
+      match /curriculumIndicators/{id} {
+        allow read: if isMember(workspaceId);
+        allow create: if canEdit(workspaceId) && validIndicator(request.resource.data);
+        allow update: if canEdit(workspaceId) && validIndicator(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+      }
 
       match /terms/{termId} {
         allow read: if isMember(workspaceId);
-        allow create: if canEdit(workspaceId) && validTimes();
-        allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-        allow delete: if isOwner(workspaceId);
+        allow create: if canEdit(workspaceId) && validTerm(request.resource.data) && request.resource.data.archivedAt == null;
+        allow update: if canEdit(workspaceId) && validTerm(request.resource.data) && unchangedCreatedAt();
+        allow delete: if false;
+
+        match /weekNumberLocks/{numberKey} {
+          allow read: if isMember(workspaceId);
+          allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+            && request.resource.data.keys().hasOnly(['number', 'weekId', 'createdAt', 'updatedAt'])
+            && request.resource.data.number is int && request.resource.data.number > 0
+            && request.resource.data.weekId is string && validTimes(request.resource.data)
+            && lockHasWeek(workspaceId, termId, request.resource.data);
+          allow update, delete: if false;
+        }
+
         match /weeks/{weekId} {
           allow read: if isMember(workspaceId);
-          allow create: if canEdit(workspaceId) && validTimes();
-          allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-          allow delete: if isOwner(workspaceId);
+          allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+            && validWeek(request.resource.data) && request.resource.data.archivedAt == null
+            && hasValidWeekNumberLock(workspaceId, termId, weekId, request.resource.data.number);
+          allow update: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+            && validWeek(request.resource.data) && unchangedCreatedAt()
+            && request.resource.data.termId == resource.data.termId
+            && request.resource.data.number == resource.data.number;
+          allow delete: if false;
+
           match /lessons/{lessonId} {
             allow read: if isMember(workspaceId);
-            allow create: if canEdit(workspaceId) && validTimes();
-            allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-            allow delete: if isOwner(workspaceId);
-            match /assessments/{assessmentId}/items/{itemId} {
+            allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+              && validLesson(request.resource.data) && request.resource.data.archivedAt == null;
+            allow update: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+              && validLesson(request.resource.data) && unchangedCreatedAt()
+              && request.resource.data.weekId == resource.data.weekId;
+            allow delete: if false;
+
+            match /assessments/{assessmentId} {
               allow read: if isMember(workspaceId);
-              allow create: if canEdit(workspaceId) && validTimes();
-              allow update: if canEdit(workspaceId) && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-              allow delete: if canEdit(workspaceId);
+              allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+                && validAssessment(request.resource.data) && request.resource.data.archivedAt == null;
+              allow update: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+                && validAssessment(request.resource.data) && unchangedCreatedAt()
+                && request.resource.data.lessonId == resource.data.lessonId;
+              allow delete: if false;
+
+              match /items/{itemId} {
+                allow read: if isMember(workspaceId);
+                allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+                  && validAssessmentItem(request.resource.data) && request.resource.data.archivedAt == null;
+                allow update: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId)
+                  && validAssessmentItem(request.resource.data) && unchangedCreatedAt()
+                  && request.resource.data.assessmentId == resource.data.assessmentId;
+                allow delete: if false;
+              }
             }
+
             match /{childCollection}/{childId} {
-              function supported() { return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'assessments', 'teachingSteps']; }
+              function supported() {
+                return childCollection in ['indicatorLinks', 'resources', 'diagrams', 'teachingSteps'];
+              }
               allow read: if isMember(workspaceId) && supported();
-              allow create: if canEdit(workspaceId) && supported() && validTimes();
-              allow update: if canEdit(workspaceId) && supported() && validTimes() && request.resource.data.createdAt == resource.data.createdAt;
-              allow delete: if canEdit(workspaceId) && supported();
+              allow create: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId) && supported()
+                && validLessonChild(childCollection, request.resource.data, lessonId);
+              allow update: if canEdit(workspaceId) && isActiveTerm(workspaceId, termId) && supported()
+                && validLessonChild(childCollection, request.resource.data, lessonId)
+                && unchangedCreatedAt() && unchangedLessonChildIdentity(childCollection);
+              allow delete: if false;
             }
           }
         }

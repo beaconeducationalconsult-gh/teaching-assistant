@@ -1,0 +1,37 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function memberPath(workspaceId) {
+      return /databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid);
+    }
+    function isMember(workspaceId) {
+      return signedIn() && firestore.exists(memberPath(workspaceId));
+    }
+    function canEdit(workspaceId) {
+      return isMember(workspaceId)
+        && firestore.get(memberPath(workspaceId)).data.role in ['owner', 'admin', 'editor'];
+    }
+    function allowedContentType(contentType) {
+      return contentType == 'application/pdf'
+        || contentType == 'image/jpeg'
+        || contentType == 'image/png'
+        || contentType == 'image/webp'
+        || contentType == 'text/plain'
+        || contentType == 'application/msword'
+        || contentType == 'application/vnd.ms-excel'
+        || contentType == 'application/vnd.ms-powerpoint'
+        || contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        || contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        || contentType == 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    }
+
+    match /workspaces/{workspaceId}/lessons/{lessonId}/resources/{resourceId}/{fileName} {
+      allow read: if isMember(workspaceId);
+      allow write: if canEdit(workspaceId)
+        && (request.resource == null
+          || (request.resource.size <= 10485760
+            && allowedContentType(request.resource.contentType)));
+    }
+  }
+}
