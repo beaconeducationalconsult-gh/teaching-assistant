@@ -1,0 +1,35 @@
+{
+  "framework_name": "Example only — not Beacon source data",
+  "country": "Ghana",
+  "curriculum_version": "test-fixture",
+  "audit_reference": "synthetic-test-fixture",
+  "levels": [
+    { "level_code": "JHS1", "label": "Junior High School 1" }
+  ],
+  "subjects": [
+    { "subject_code": "SCI", "name": "Science", "overview": "Synthetic example" }
+  ],
+  "strands": [
+    {
+      "level_code": "JHS1",
+      "subject_code": "SCI",
+      "strand_code": "S1",
+      "title": "Example strand",
+      "sub_strands": [
+        {
+          "sub_strand_code": "SS1",
+          "title": "Example sub-strand",
+          "content_standards": [
+            {
+              "standard_code": "EX-1",
+              "statement": "Synthetic example statement.",
+              "learning_indicators": [
+                { "indicator_code": "EX-1.1", "text": "Synthetic example indicator." }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

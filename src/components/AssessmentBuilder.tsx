@@ -136,7 +136,7 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
     setBusy(true); setError("");
     try {
       const normalizedOptions = itemType === "multipleChoice" ? options.split("\n").map((value) => value.trim()).filter(Boolean) : itemType === "trueFalse" ? ["True", "False"] : [];
-      const values = { type: itemType, prompt: prompt.trim(), marks: Math.max(1, Number(marks) || 1), options: normalizedOptions, answer: answer.trim(), markingGuide: markingGuide.trim(), indicatorId: indicatorId || null };
+      const values = { type: itemType, prompt: prompt.trim(), marks: Math.max(1, Math.floor(Number(marks) || 1)), options: normalizedOptions, answer: answer.trim(), markingGuide: markingGuide.trim(), indicatorId: indicatorId || null };
       await updateAssessmentItem(workspaceId, termId, weekId, lessonId, active.id, editingItemId, values);
       setItems((rows) => rows.map((row) => row.id === editingItemId ? { ...row, ...values } : row));
       resetItemForm();
@@ -168,7 +168,7 @@ export default function AssessmentBuilder({ workspaceId, termId, weekId, lessonI
         assessmentId: active.id,
         type: itemType,
         prompt: prompt.trim(),
-        marks: Math.max(1, Number(marks) || 1),
+        marks: Math.max(1, Math.floor(Number(marks) || 1)),
         options: normalizedOptions,
         answer: answer.trim(),
         markingGuide: markingGuide.trim(),
