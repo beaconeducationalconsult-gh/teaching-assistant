@@ -4,20 +4,22 @@ import { addLessonFile, addLessonIndicatorLink, addLessonResource, addTeachingSt
 import CurriculumPicker, { type CurriculumIndicatorChoice } from "./CurriculumPicker";
 import AssessmentBuilder from "./AssessmentBuilder";
 import LessonGenerator, { type GeneratedLessonDraft } from "./LessonGenerator";
+import { DURATION_CUSTOM, DURATION_NONE, DURATION_PRESETS, MIN_LESSON_MINUTES, durationSelection, parseDurationMinutes, validateLessonDuration } from "../lib/lessonSetup";
 
-type Props = { workspaceId: string; termId: string; weekId: string; lesson: LessonRow; onBack: () => void; onSaved: () => void; };
+type Props = { workspaceId: string; termId: string; weekId: string; lesson: LessonRow; placement?: string; onBack: () => void; onSaved: () => void; };
 type LessonFields = Pick<LessonRow, "title" | "summary" | "objectives" | "plannedDate" | "durationMinutes" | "status">;
 
 function fieldsFromLesson(lesson: LessonRow): LessonFields {
   return { title: lesson.title, summary: lesson.summary, objectives: lesson.objectives, plannedDate: lesson.plannedDate, durationMinutes: lesson.durationMinutes, status: lesson.status };
 }
 
-export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, onBack, onSaved }: Props) {
+export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, placement, onBack, onSaved }: Props) {
   const [title, setTitle] = useState(lesson.title);
   const [summary, setSummary] = useState(lesson.summary);
   const [objectives, setObjectives] = useState(lesson.objectives);
   const [plannedDate, setPlannedDate] = useState(lesson.plannedDate || "");
   const [duration, setDuration] = useState(lesson.durationMinutes ? String(lesson.durationMinutes) : "");
+  const [durationChoice, setDurationChoice] = useState(() => durationSelection(lesson.durationMinutes));
   const [status, setStatus] = useState(lesson.status);
   const [savedFields, setSavedFields] = useState<LessonFields>(() => fieldsFromLesson(lesson));
   const [links, setLinks] = useState<LessonIndicatorLinkRow[]>([]);
@@ -43,9 +45,9 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
     summary,
     objectives,
     plannedDate: plannedDate || null,
-    durationMinutes: duration ? Number(duration) : null,
+    durationMinutes: durationChoice === DURATION_NONE ? null : parseDurationMinutes(duration),
     status,
-  }), [title, summary, objectives, plannedDate, duration, status]);
+  }), [title, summary, objectives, plannedDate, duration, durationChoice, status]);
   const editedStep = steps.find((step) => step.id === editingStepId);
   const stepFormDirty = editingStepId
     ? !editedStep || editedStep.title !== stepTitle.trim() || editedStep.phase !== stepPhase
@@ -84,7 +86,9 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
       return;
     }
     const durationMinutes = requestedDuration ?? draft.steps.reduce((sum, step) => sum + (step.minutes || 0), 0);
-    setTitle(draft.title); setSummary(draft.summary); setObjectives(draft.objectives); setDuration(String(durationMinutes)); setSaving(true); setError("");
+    setTitle(draft.title); setSummary(draft.summary); setObjectives(draft.objectives);
+    setDuration(String(durationMinutes)); setDurationChoice(durationSelection(durationMinutes));
+    setSaving(true); setError("");
     try {
       await updateLesson(workspaceId, termId, weekId, lesson.id, { title: draft.title, summary: draft.summary, objectives: draft.objectives, durationMinutes });
       setSavedFields((previous) => ({ ...previous, title: draft.title, summary: draft.summary, objectives: draft.objectives, durationMinutes }));
@@ -96,17 +100,33 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
     finally { setSaving(false); }
   }
 
+  function chooseDuration(value: string) {
+    setDurationChoice(value);
+    if (value === DURATION_NONE) setDuration("");
+    else if (value !== DURATION_CUSTOM) setDuration(value);
+  }
+
   async function save(event?: FormEvent) {
-    event?.preventDefault(); setSaving(true); setError("");
+    event?.preventDefault();
+    const durationMinutes = durationChoice === DURATION_NONE ? null : parseDurationMinutes(duration);
+    if (durationChoice === DURATION_CUSTOM && durationMinutes === null) {
+      setError("Enter the lesson length as a whole number of minutes, for example 45.");
+      return;
+    }
+    const durationError = validateLessonDuration(durationMinutes);
+    if (durationError) { setError(durationError); return; }
+    setSaving(true); setError("");
     const values: LessonFields = {
       title: title.trim(), summary: summary.trim(), objectives: objectives.trim(),
       plannedDate: plannedDate || null,
-      durationMinutes: duration ? Number(duration) : null,
+      durationMinutes,
       status,
     };
     try {
       await updateLesson(workspaceId, termId, weekId, lesson.id, values);
       setTitle(values.title); setSummary(values.summary); setObjectives(values.objectives);
+      setDuration(durationMinutes === null ? "" : String(durationMinutes));
+      setDurationChoice(durationSelection(durationMinutes));
       setSavedFields(values);
       onSaved();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save this lesson."); }
@@ -243,7 +263,7 @@ export default function LessonWorkspace({ workspaceId, termId, weekId, lesson, o
         <LessonGenerator indicators={links} durationMinutes={duration ? Number(duration) : null} onApply={(draft) => void applyGeneratedDraft(draft)} />
       </div>
       <aside className="editor-side">
-        <section className="editor-card"><span className="overline">TEACHING DETAILS</span><div className="detail-field"><CalendarDays size={15}/><label>Date<input type="date" value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)}/></label></div><div className="detail-field"><Clock3 size={15}/><label>Duration (minutes)<input type="number" min="6" step="1" value={duration} onChange={(event) => setDuration(event.target.value)} placeholder="50"/></label></div><div className="detail-field"><Check size={15}/><label>Status<select value={status} onChange={(event) => setStatus(event.target.value as LessonRow["status"])}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select></label></div></section>
+        <section className="editor-card lesson-setup-card"><div className="editor-card-head"><div><span className="overline">LESSON SETUP</span><h2>Plan the delivery</h2></div>{placement && <span className="setup-meta">{placement}</span>}</div><div className="detail-field"><Check size={15}/><label>Status<select value={status} onChange={(event) => setStatus(event.target.value as LessonRow["status"])}><option value="draft">Draft</option><option value="ready">Ready</option><option value="taught">Taught</option></select></label></div><div className="detail-field"><Clock3 size={15}/><label>Lesson length<select value={durationChoice} onChange={(event) => chooseDuration(event.target.value)}><option value={DURATION_NONE}>Not set</option>{DURATION_PRESETS.map((minutes) => <option key={minutes} value={String(minutes)}>{minutes} minutes</option>)}<option value={DURATION_CUSTOM}>Custom…</option></select>{durationChoice === DURATION_CUSTOM && <input className="duration-custom" type="number" min={MIN_LESSON_MINUTES} step="1" value={duration} onChange={(event) => setDuration(event.target.value)} placeholder="Minutes"/>}</label></div><div className="detail-field"><CalendarDays size={15}/><label>Planned date<input type="date" value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)}/></label></div><small className="helper">Lesson length drives the lesson-plan starter, which splits the total across the six teaching phases.</small></section>
         <section className="editor-card">
           <div className="editor-card-head"><div><span className="overline">TEACHING FLOW</span><h2>Lesson sequence</h2></div><span className="count-pill">{steps.length}</span></div>
           <div className="step-list">{steps.map((step, index) => <div className="teaching-step" key={step.id}><span className="step-number">{String(index + 1).padStart(2, "0")}</span><div><div className="step-meta"><b>{step.title}</b><small>{step.phase}{step.minutes ? " · " + step.minutes + " min" : ""}</small></div><p>{step.instructions}</p></div><div className="step-actions"><button type="button" className="icon-only" title="Move up" disabled={index === 0} onClick={() => void moveStep(index, -1)}><ArrowUp size={12}/></button><button type="button" className="icon-only" title="Move down" disabled={index === steps.length - 1} onClick={() => void moveStep(index, 1)}><ArrowDown size={12}/></button><button type="button" className="icon-only" title="Edit step" onClick={() => beginEditStep(step)}><span className="edit-mark">Edit</span></button><button type="button" className="icon-only danger-icon" title="Remove step" onClick={() => void removeStep(step.id)}><Trash2 size={14}/></button></div></div>)}</div>

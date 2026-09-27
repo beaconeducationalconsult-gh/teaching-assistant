@@ -78,8 +78,13 @@ is synthetic test data only; do not import it into a live workspace.
 
 - Email/password sign-up and sign-in, with a personal workspace created on
   first sign-in.
+- Two appearances — Warm Light (default) and Slate Dark — chosen from a switch in
+  the topbar (and on the sign-in screen), remembered per browser, on a shared
+  palette token scale with a contrast and minimum-type floor.
 - Workspace-scoped terms, weeks and lessons, including date checks, reserved
   week numbers, reordering, archiving and restoration.
+- Dropdown-based lesson setup: the new-lesson dialog picks the term and week from
+  dropdowns, and the lesson workspace sets status, lesson length and planned date.
 - Lesson details with curriculum links, objectives, teaching steps, assessments,
   notes/links and private file attachments.
 - A transparent, local template-based lesson-plan starter (no LLM/API call).
@@ -91,6 +96,50 @@ workspace switching and a curriculum admin UI need trusted server-side code and
 are intentionally not presented as available controls. Full-text search needs a
 search index or external service; lesson search currently matches titles loaded
 for the selected term.
+
+## Appearance
+
+The switch in the topbar toggles between the original warm editorial palette
+("Warm Light") and the dense dark palette ("Slate Dark"). Warm Light is the
+default; the choice is written to `localStorage` under
+`teaching-assistant.theme` and re-applied by a small inline script in
+`index.html` before first paint, so reloads and new tabs keep the same
+appearance without flashing the other palette. `src/lib/theme.ts` holds the
+parsing, persistence and `<html class="theme-dense">` application; the palettes
+themselves live in `src/styles.css`. The dark palette also declares
+`color-scheme: dark` so native controls and scrollbars match.
+
+### Palette tokens
+
+Both appearances are driven by the same token names. Warm Light values sit in
+`:root` and Slate Dark overrides them in `.theme-dense`, so a colour is changed
+once instead of per palette:
+
+- text: `--ink`, `--ink-soft`, `--muted`, `--faint`, `--olive-ink`, `--teal-ink`,
+  `--danger`, `--field-ink`, `--placeholder`
+- surfaces and lines: `--paper`, `--surface`, `--surface-raised`,
+  `--surface-sunken`, `--field-bg`, `--tint`, `--tint-strong`, `--active`,
+  `--hover`, `--tan`, `--line`, `--line-soft`, `--line-strong`
+- accents and type: `--olive`, `--text-micro` (10px), `--text-small` (11px)
+
+The mid-tier greys were re-tuned when Warm Light became the default appearance:
+the previous `--muted`/caption greys measured between 2.3:1 and 3.2:1 against
+their backgrounds at 8px, which is unreadable on a projector or an older laptop.
+Every text token now clears 4.5:1 (WCAG AA) on the surfaces it is used on, the
+smallest type in the app is 10px, and `tests/palette.test.ts` fails the build if
+either palette drifts below those levels or the two palettes stop defining the
+same token names. Illustration, brand and small tint chips deliberately keep
+one-off literals.
+
+## Lesson setup
+
+`Add a lesson to this week` opens a dialog that selects the term and week from
+dropdowns (pre-filled with the week you clicked) and shows the dated weeks of
+whichever term is chosen. Firestore rules keep `weekId` fixed for the life of a
+lesson document, so the placement is chosen at creation; the lesson workspace
+then shows that placement and sets status, lesson length (preset durations plus a
+custom value) and the planned date. Lesson length feeds the lesson-plan starter,
+which splits the total minutes across the six teaching phases.
 
 ## Security and data handling
 
@@ -107,10 +156,15 @@ credentials guidance.
 - `src/App.tsx` — auth boundary and term/week planning UI.
 - `src/components/` — curriculum browser/picker, lesson workspace, assessment
   builder and lesson-plan starter.
+- `src/lib/theme.ts` — appearance preference: parsing, persistence and applying it
+  to the document.
+- `src/lib/lessonSetup.ts` — duration presets/custom parsing and week selection for
+  the dropdown-based lesson setup.
 - `src/lib/` — Firebase access, planning data operations and validation.
 - `src/types/models.ts` — Firestore record types.
 - `scripts/` — audited curriculum normalizer/importer.
-- `tests/` — validation and Firestore/Storage rules tests.
+- `tests/` — validation, lesson setup, appearance, palette and Firestore/Storage
+  rules tests.
 - `firebase/firestore.rules` and `firebase/storage.rules` — access controls.
 - `firebase/firestore.indexes.json` — composite query indexes.
 - `.github/workflows/ci.yml` — build and test workflow.

@@ -6,6 +6,20 @@
     <meta name="theme-color" content="#f6f5f0" />
     <meta name="description" content="Plan terms, weeks, lessons, and curriculum in one thoughtful workspace." />
     <title>Teaching Assistant</title>
+    <script>
+      /* Apply the remembered appearance before first paint so the page never flashes the other palette.
+         Keep the storage key in step with THEME_STORAGE_KEY in src/lib/theme.ts. */
+      (function () {
+        try {
+          var stored = window.localStorage.getItem("teaching-assistant.theme");
+          var slate = stored === "slate";
+          if (slate) document.documentElement.classList.add("theme-dense");
+          document.documentElement.dataset.theme = slate ? "slate" : "warm";
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", slate ? "#0e1115" : "#f6f5f0");
+        } catch (error) {}
+      })();
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>
